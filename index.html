@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Mappa del cielo notturno per Punta Ala. Perseidi, costellazioni e stelle.">
+  <meta name="theme-color" content="#080c18">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Punta Ala — Cielo Notturno</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <canvas id="sky" role="img" aria-label="Mappa interattiva del cielo notturno"></canvas>
+
+  <div id="orientation-note" aria-hidden="true">↓ mare (ovest)</div>
+
+  <!-- ── Top info bar ────────────────────────────────────── -->
+  <header id="info-bar" aria-label="Informazioni astronomiche">
+    <div id="info-chips">
+      <span class="info-chip" id="info-sun-chip" title="Tramonto e alba">
+        <span class="info-chip-icon" aria-hidden="true">☀</span>
+        <span class="info-chip-text" id="info-sun-text">—</span>
+      </span>
+      <span class="info-chip" id="info-moon-chip" title="Fase lunare">
+        <span class="info-chip-icon" id="info-moon-icon" aria-hidden="true">🌑</span>
+        <span class="info-chip-text" id="info-moon-text">—</span>
+      </span>
+      <span class="info-chip info-chip--planets" id="info-planets-chip" aria-label="Pianeti visibili" style="display:none">
+        <span class="info-chip-text" id="info-planets-text"></span>
+      </span>
+    </div>
+    <div id="info-event" role="status" aria-live="polite" style="display:none"></div>
+  </header>
+
+  <!-- ── Bottom dock ─────────────────────────────────────── -->
+  <div id="dock">
+    <div id="time-row">
+      <span id="hour-label" aria-live="polite">22:30</span>
+      <input type="range" id="time-slider" min="0" max="168" value="0" step="1"
+             aria-label="Ora della notte">
+      <span id="end-label" aria-hidden="true">07:00</span>
+    </div>
+
+    <div id="action-row">
+      <div class="action-group">
+        <button id="btn-play" class="btn btn-icon" aria-label="Riproduci animazione">▶</button>
+        <button id="btn-now" class="btn btn-ghost">Adesso</button>
+        <span id="speed-label" aria-hidden="true" style="display:none">33 min/s</span>
+      </div>
+      <div class="action-group">
+        <button id="btn-explore" class="btn btn-accent" aria-label="Esplora costellazioni e stelle">
+          <span aria-hidden="true">✦</span> Esplora
+        </button>
+        <button id="btn-settings" class="btn btn-icon" aria-label="Impostazioni visibilità">⚙</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Explore sheet ───────────────────────────────────── -->
+  <div id="explore-overlay" class="sheet-overlay" aria-hidden="true">
+    <div id="explore-panel" class="sheet-panel" role="dialog"
+         aria-modal="true" aria-labelledby="explore-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title" id="explore-title">Esplora</h2>
+        <button class="btn btn-icon sheet-close" id="btn-explore-close"
+                aria-label="Chiudi Esplora">✕</button>
+      </div>
+      <div class="sheet-search-row">
+        <input type="search" id="explore-search" autocomplete="off"
+               placeholder="Cerca costellazione o stella…"
+               aria-label="Cerca nel cielo">
+      </div>
+      <div class="sheet-tabs" role="tablist" id="explore-tablist">
+        <button class="sheet-tab active" role="tab"
+                aria-selected="true" aria-controls="explore-constellations"
+                data-tab="constellations">Costellazioni</button>
+        <button class="sheet-tab" role="tab"
+                aria-selected="false" aria-controls="explore-stars"
+                data-tab="stars">Stelle</button>
+      </div>
+      <div class="sheet-body" id="explore-body">
+        <div id="explore-constellations" class="tab-pane active" role="tabpanel"></div>
+        <div id="explore-stars" class="tab-pane" role="tabpanel"></div>
+        <div id="explore-search-results" class="tab-pane"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Settings sheet ─────────────────────────────────── -->
+  <div id="settings-overlay" class="sheet-overlay" aria-hidden="true">
+    <div id="settings-panel" class="sheet-panel" role="dialog"
+         aria-modal="true" aria-labelledby="settings-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title" id="settings-title">Impostazioni</h2>
+        <button class="btn btn-icon sheet-close" id="btn-settings-close"
+                aria-label="Chiudi impostazioni">✕</button>
+      </div>
+      <div class="sheet-body">
+
+        <section class="settings-section">
+          <h3 class="settings-section-title">Visualizzazione</h3>
+          <label class="toggle-row" for="toggle-night">
+            <span class="toggle-text">
+              <span class="toggle-label">Modalità notte</span>
+              <span class="toggle-hint">Schermo rosso per preservare la visione notturna</span>
+            </span>
+            <input type="checkbox" id="toggle-night" class="toggle-input" role="switch"
+                   aria-checked="false">
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+          <label class="toggle-row" for="toggle-const">
+            <span class="toggle-text">
+              <span class="toggle-label">Linee costellazioni</span>
+              <span class="toggle-hint">Linee e nomi che uniscono le stelle</span>
+            </span>
+            <input type="checkbox" id="toggle-const" class="toggle-input" role="switch"
+                   aria-checked="true" checked>
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+          <label class="toggle-row" for="toggle-art">
+            <span class="toggle-text">
+              <span class="toggle-label">Figure mitologiche</span>
+              <span class="toggle-hint">Riempimento soft lungo la forma reale delle stelle</span>
+            </span>
+            <input type="checkbox" id="toggle-art" class="toggle-input" role="switch"
+                   aria-checked="false">
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3 class="settings-section-title">Inquinamento luminoso</h3>
+          <p class="settings-desc">
+            Scegli la classe Bortle per simulare quante stelle riesci a vedere dal luogo in cui ti trovi.
+          </p>
+          <div id="bortle-selector">
+            <div id="bortle-track-labels" aria-hidden="true"></div>
+            <input type="range" id="bortle-slider" min="1" max="9" value="4" step="1"
+                   aria-label="Scala Bortle: 1 cielo perfetto, 9 centro città">
+            <div id="bortle-track-strip" aria-hidden="true"></div>
+          </div>
+          <div id="bortle-card" aria-live="polite"></div>
+        </section>
+
+        <section class="settings-section">
+          <h3 class="settings-section-title">Ostruzioni all'orizzonte</h3>
+          <p class="settings-desc">
+            Nasconde le stelle basse bloccate da alberi, dune o edifici.
+          </p>
+          <div class="mask-control">
+            <label for="mask-east" class="mask-label">
+              <span class="mask-icon" aria-hidden="true">🌳</span> Est
+            </label>
+            <input type="range" id="mask-east" min="0" max="25" value="0" step="1"
+                   aria-label="Altezza ostruzioni a est, in gradi">
+            <output class="mask-val" id="mask-east-val">0°</output>
+          </div>
+          <div class="mask-control">
+            <label for="mask-west" class="mask-label">
+              <span class="mask-icon" aria-hidden="true">💡</span> Ovest
+            </label>
+            <input type="range" id="mask-west" min="0" max="25" value="0" step="1"
+                   aria-label="Altezza ostruzioni a ovest, in gradi">
+            <output class="mask-val" id="mask-west-val">0°</output>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── First-use hint ─────────────────────────────────── -->
+  <div id="hint-overlay" aria-hidden="true">
+    <div id="hint-card" role="dialog" aria-modal="true" aria-labelledby="hint-title">
+      <h3 class="hint-title" id="hint-title">Come orientarsi</h3>
+      <div class="hint-row">
+        <span class="hint-icon" aria-hidden="true">🧭</span>
+        <p class="hint-text">
+          Stai guardando <strong>verso ovest</strong> (il mare di Punta Ala).
+          Il nord è a destra, il sud a sinistra.
+        </p>
+      </div>
+      <div class="hint-row">
+        <span class="hint-icon" aria-hidden="true">👆</span>
+        <p class="hint-text">
+          Pizzica per zoomare · Doppio tocco per il reset.
+          Usa <strong>Esplora</strong> per scoprire costellazioni e miti.
+        </p>
+      </div>
+      <button id="hint-dismiss" class="btn btn-hint">Inizia a esplorare →</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/astronomy.js"></script>
+<script src="js/data-stars.js"></script>
+<script src="js/data-const.js"></script>
+<script src="js/data-names.js"></script>
+<script src="js/data-myths.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
