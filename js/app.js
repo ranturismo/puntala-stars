@@ -54,6 +54,8 @@
   const speedLabel   = document.getElementById('speed-label');
   const btnExplore   = document.getElementById('btn-explore');
   const btnSettings  = document.getElementById('btn-settings');
+  const btnCompass   = document.getElementById('btn-compass');
+  const orientationNote = document.getElementById('orientation-note');
 
   // Info bar
   const infoSunText     = document.getElementById('info-sun-text');
@@ -632,6 +634,139 @@
       clearTimeout(playTimer);
       playTimer = null;
     }
+  });
+
+  /* ──────────────────────────────────────────────────────────
+     Compass follow — rotate sky to match device heading
+  ────────────────────────────────────────────────────────── */
+  const FIXED_HEAD_AZ = 90; // top of screen = east (feet toward mare / west)
+  const CARDINAL_IT = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  let compassOn = false;
+  let compassSmooth = null;
+  let compassLastApplied = null;
+  let compassAbsoluteHandler = null;
+  let compassRelativeHandler = null;
+  let compassGotAbsolute = false;
+
+  function cardinalIt(az) {
+    return CARDINAL_IT[Math.round((((az % 360) + 360) % 360) / 45) % 8];
+  }
+
+  function screenOrientationOffset() {
+    if (screen.orientation && typeof screen.orientation.angle === 'number') {
+      return screen.orientation.angle;
+    }
+    if (typeof window.orientation === 'number') return window.orientation;
+    return 0;
+  }
+
+  function headingFromEvent(e) {
+    if (e == null) return null;
+    // iOS: clockwise from north, relative to top of screen
+    if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
+      return e.webkitCompassHeading;
+    }
+    if (typeof e.alpha !== 'number' || Number.isNaN(e.alpha)) return null;
+    // Absolute alpha: 0 = north, increases counterclockwise → convert to compass heading
+    let heading = (360 - e.alpha) % 360;
+    heading = (heading + screenOrientationOffset() + 360) % 360;
+    return heading;
+  }
+
+  function applyCompassHeading(raw) {
+    if (raw == null || Number.isNaN(raw)) return;
+    if (compassSmooth == null) {
+      compassSmooth = raw;
+    } else {
+      const diff = ((raw - compassSmooth + 540) % 360) - 180;
+      compassSmooth = (compassSmooth + diff * 0.22 + 360) % 360;
+    }
+    if (compassLastApplied != null) {
+      const delta = Math.abs(((compassSmooth - compassLastApplied + 540) % 360) - 180);
+      if (delta < 0.7) return;
+    }
+    compassLastApplied = compassSmooth;
+    sky.setOrientation(compassSmooth);
+    const feetAz = (compassSmooth + 180) % 360;
+    orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
+  }
+
+  function onAbsoluteOrientation(e) {
+    const h = headingFromEvent(e);
+    if (h == null) return;
+    compassGotAbsolute = true;
+    applyCompassHeading(h);
+  }
+
+  function onRelativeOrientation(e) {
+    if (compassGotAbsolute) return;
+    applyCompassHeading(headingFromEvent(e));
+  }
+
+  function stopCompass() {
+    compassOn = false;
+    compassSmooth = null;
+    compassLastApplied = null;
+    compassGotAbsolute = false;
+    if (compassAbsoluteHandler) {
+      window.removeEventListener('deviceorientationabsolute', compassAbsoluteHandler);
+      compassAbsoluteHandler = null;
+    }
+    if (compassRelativeHandler) {
+      window.removeEventListener('deviceorientation', compassRelativeHandler);
+      compassRelativeHandler = null;
+    }
+    btnCompass.setAttribute('aria-pressed', 'false');
+    btnCompass.setAttribute('aria-label', 'Segui bussola');
+    btnCompass.title = 'Segui bussola';
+    sky.setOrientation(FIXED_HEAD_AZ);
+    orientationNote.textContent = '↓ mare (ovest)';
+  }
+
+  function startCompassListeners() {
+    compassOn = true;
+    compassSmooth = null;
+    compassLastApplied = null;
+    compassGotAbsolute = false;
+    compassAbsoluteHandler = onAbsoluteOrientation;
+    compassRelativeHandler = onRelativeOrientation;
+    window.addEventListener('deviceorientationabsolute', compassAbsoluteHandler);
+    window.addEventListener('deviceorientation', compassRelativeHandler);
+    btnCompass.setAttribute('aria-pressed', 'true');
+    btnCompass.setAttribute('aria-label', 'Disattiva bussola');
+    btnCompass.title = 'Disattiva bussola';
+    orientationNote.textContent = '↓ bussola…';
+  }
+
+  async function requestCompassPermission() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const state = await DeviceOrientationEvent.requestPermission();
+      return state === 'granted';
+    }
+    return true;
+  }
+
+  btnCompass.addEventListener('click', async () => {
+    if (compassOn) {
+      stopCompass();
+      return;
+    }
+    if (typeof window.DeviceOrientationEvent === 'undefined') {
+      orientationNote.textContent = 'bussola non disponibile';
+      return;
+    }
+    try {
+      const ok = await requestCompassPermission();
+      if (!ok) {
+        orientationNote.textContent = 'permesso bussola negato';
+        return;
+      }
+    } catch (err) {
+      orientationNote.textContent = 'permesso bussola negato';
+      return;
+    }
+    startCompassListeners();
   });
 
   /* ──────────────────────────────────────────────────────────

@@ -107,6 +107,13 @@ window.SkyRenderer = class SkyRenderer {
     this.render();
   }
 
+  /** headAz = azimuth at the top of the screen (degrees, 0 = N). */
+  setOrientation(headAz) {
+    this.headAz = ((headAz % 360) + 360) % 360;
+    this.feetAz = (this.headAz + 180) % 360;
+    this.render();
+  }
+
   getInfo() {
     const d = this.date;
     const obs = this.observer;
@@ -247,6 +254,9 @@ window.SkyRenderer = class SkyRenderer {
     // Draw stars
     this.drawStars(ctx, cx, cy, R, headAz, d, obs, sunAlt);
 
+    // Naked-eye galaxies (M31, M33)
+    this.drawGalaxies(ctx, cx, cy, R, headAz, d, obs, sunAlt);
+
     // Mythological figure silhouettes (behind stick lines)
     if (this.showConstellationArt) {
       this.drawConstellationArt(ctx, cx, cy, R, headAz, d, obs, sunAlt);
@@ -373,8 +383,18 @@ window.SkyRenderer = class SkyRenderer {
     ctx.restore();
   }
 
+  /** Max magnitude for star name labels — deeper names appear as you zoom in. */
+  labelMagLimit() {
+    // zoom 1 → 2.5, zoom 6 → ~4.5 (also capped by sky limiting magnitude)
+    const byZoom = 2.5 + (this.zoom - 1) * 0.4;
+    return Math.min(this.limitingMag, byZoom);
+  }
+
   drawStars(ctx, cx, cy, R, headAz, date, obs, sunAlt) {
     const hl = this.highlighted;
+    const labelLimit = this.labelMagLimit();
+    const pendingLabels = [];
+
     for (const star of STARS) {
       const ra = star[0] / 1000;
       const dec = star[1] / 1000;
@@ -443,19 +463,110 @@ window.SkyRenderer = class SkyRenderer {
           ctx.fill();
         }
 
-        if (nameIdx > 0 && hor.altitude > 5 && mag <= 2.5) {
-          const name = STAR_NAMES[nameIdx - 1];
+        if (nameIdx > 0 && hor.altitude > 5 && mag <= labelLimit) {
           const nameAlpha = hl ? (highlightGlow ? 0.9 : alpha * 0.5) : alpha * 0.8;
           if (nameAlpha >= 0.05) {
-            ctx.fillStyle = `rgba(255,255,255,${nameAlpha.toFixed(2)})`;
-            ctx.font = highlightGlow ? 'bold 11px sans-serif' : '10px sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(name, pos.x + size + 3, pos.y - 1);
+            pendingLabels.push({
+              name: STAR_NAMES[nameIdx - 1],
+              x: pos.x + size + 3,
+              y: pos.y - 1,
+              mag,
+              nameAlpha,
+              highlightGlow,
+            });
           }
         }
       } catch(e) {
         // Skip stars that fail
+      }
+    }
+
+    // Brightest names first; skip overlaps so zoom can reveal more without clutter
+    pendingLabels.sort((a, b) => a.mag - b.mag);
+    const placed = [];
+    const minLabelDist = this.zoom >= 3 ? 26 : 34;
+    for (const lab of pendingLabels) {
+      let overlaps = false;
+      if (!lab.highlightGlow) {
+        for (const p of placed) {
+          if (Math.hypot(lab.x - p.x, lab.y - p.y) < minLabelDist) {
+            overlaps = true;
+            break;
+          }
+        }
+      }
+      if (overlaps) continue;
+      placed.push(lab);
+      ctx.fillStyle = `rgba(255,255,255,${lab.nameAlpha.toFixed(2)})`;
+      ctx.font = lab.highlightGlow
+        ? 'bold 11px sans-serif'
+        : lab.mag > 2.5
+          ? '9px sans-serif'
+          : '10px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(lab.name, lab.x, lab.y);
+    }
+  }
+
+  drawGalaxies(ctx, cx, cy, R, headAz, date, obs, sunAlt) {
+    if (typeof GALAXIES === 'undefined' || !GALAXIES.length) return;
+    if (sunAlt > -8) return; // washed out in twilight
+
+    // Degrees → screen pixels (horizon radius spans 90°)
+    const degToPx = R / 90;
+
+    for (const g of GALAXIES) {
+      // M33 (~5.7) is naked-eye only under excellent skies — allow a small margin
+      if (g.mag > this.limitingMag + 0.8) continue;
+
+      try {
+        const hor = Astronomy.Horizon(date, obs, g.ra / 15, g.dec, 'normal');
+        if (hor.altitude <= -3) continue;
+
+        const pos = this.altAzToScreen(hor.altitude, hor.azimuth);
+        const horizonDim = Math.min(1, Math.max(0, (hor.altitude + 3) / 12));
+        const maskAlpha = this.getMaskAlpha(hor.altitude, hor.azimuth);
+        const visibility = Math.max(0, Math.min(1, (this.limitingMag - g.mag + 0.5) / 2));
+        let alpha = (0.55 - this.skyGlow * 0.35) * horizonDim * maskAlpha * visibility;
+        if (alpha < 0.04) continue;
+
+        const rx = Math.max(4, g.sizeMaj * degToPx * 0.55);
+        const ry = Math.max(2.5, g.sizeMin * degToPx * 0.55);
+
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        // Approximate on-sky tilt; PA is from north through east, screen y is altitude
+        ctx.rotate(((g.pa || 0) - 90) * Math.PI / 180);
+        ctx.scale(1, ry / rx);
+
+        const glow = ctx.createRadialGradient(0, 0, rx * 0.08, 0, 0, rx);
+        glow.addColorStop(0, `rgba(200,210,255,${(alpha * 0.85).toFixed(2)})`);
+        glow.addColorStop(0.35, `rgba(170,185,240,${(alpha * 0.35).toFixed(2)})`);
+        glow.addColorStop(1, 'rgba(150,170,230,0)');
+        ctx.beginPath();
+        ctx.arc(0, 0, rx, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+        ctx.restore();
+
+        // Core hint
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, Math.max(1.2, rx * 0.08), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(220,225,255,${(alpha * 0.7).toFixed(2)})`;
+        ctx.fill();
+
+        // Label — always for M31; M33 only when zoomed or very dark
+        const showLabel = g.mag <= 4.0 || this.zoom >= 2 || this.limitingMag >= 5.0;
+        if (showLabel && hor.altitude > 3) {
+          ctx.fillStyle = `rgba(200,210,255,${Math.min(0.85, alpha + 0.25).toFixed(2)})`;
+          ctx.font = this.zoom >= 2 ? '10px sans-serif' : '9px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(g.name, pos.x + rx * 0.35 + 4, pos.y - ry * 0.2);
+        }
+      } catch (e) {
+        // skip
       }
     }
   }

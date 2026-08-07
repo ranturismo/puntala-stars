@@ -406,6 +406,18 @@ html[data-night="1"] #time-slider::-moz-range-track {
   line-height: 1;
 }
 
+.btn[aria-pressed="true"] {
+  border-color: var(--accent-b-brd);
+  background: var(--accent-b-bg);
+  color: var(--accent-b);
+}
+
+html[data-night="1"] .btn[aria-pressed="true"] {
+  border-color: rgba(255,80,40,0.45);
+  background: rgba(255,60,20,0.14);
+  color: rgba(255,120,80,0.95);
+}
+
 .btn-accent {
   border-color: var(--accent-b-brd);
   background: var(--accent-b-bg);
