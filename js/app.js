@@ -88,9 +88,10 @@
   const maskWest         = document.getElementById('mask-west');
   const maskEastVal      = document.getElementById('mask-east-val');
   const maskWestVal      = document.getElementById('mask-west-val');
-  const toggleNight      = document.getElementById('toggle-night');
-  const toggleConst      = document.getElementById('toggle-const');
-  const toggleArt        = document.getElementById('toggle-art');
+  const fabNight = document.getElementById('fab-night');
+  const fabConst = document.getElementById('fab-const');
+  const fabArt   = document.getElementById('fab-art');
+  const fabAz    = document.getElementById('fab-az');
 
   // Hint
   const hintOverlay  = document.getElementById('hint-overlay');
@@ -125,17 +126,23 @@
     try { localStorage.setItem(key, String(value)); } catch (e) {}
   }
 
+  function fabOn(btn) {
+    return btn.getAttribute('aria-pressed') === 'true';
+  }
+
+  function setFab(btn, on) {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function loadPrefs() {
     const b = parseInt(storageGet('pala_bortle', '4'), 10);
     bortleSlider.value = Math.max(1, Math.min(9, b));
     maskEast.value = parseInt(storageGet('pala_east', '0'), 10);
     maskWest.value = parseInt(storageGet('pala_west', '0'), 10);
-    toggleNight.checked = storageGet('pala_night', '0') === '1';
-    toggleConst.checked = storageGet('pala_const', '1') !== '0';
-    toggleArt.checked = storageGet('pala_art', '0') === '1';
-    toggleNight.setAttribute('aria-checked', toggleNight.checked ? 'true' : 'false');
-    toggleConst.setAttribute('aria-checked', toggleConst.checked ? 'true' : 'false');
-    toggleArt.setAttribute('aria-checked', toggleArt.checked ? 'true' : 'false');
+    setFab(fabNight, storageGet('pala_night', '0') === '1');
+    setFab(fabConst, storageGet('pala_const', '1') !== '0');
+    setFab(fabArt, storageGet('pala_art', '0') === '1');
+    setFab(fabAz, storageGet('pala_az', '0') === '1');
     updateMaskValues();
     applyBortle();
     applyDisplayPrefs();
@@ -145,31 +152,34 @@
     storageSet('pala_bortle', bortleSlider.value);
     storageSet('pala_east',   maskEast.value);
     storageSet('pala_west',   maskWest.value);
-    storageSet('pala_night',  toggleNight.checked ? '1' : '0');
-    storageSet('pala_const',  toggleConst.checked ? '1' : '0');
-    storageSet('pala_art',    toggleArt.checked ? '1' : '0');
+    storageSet('pala_night',  fabOn(fabNight) ? '1' : '0');
+    storageSet('pala_const',  fabOn(fabConst) ? '1' : '0');
+    storageSet('pala_art',    fabOn(fabArt) ? '1' : '0');
+    storageSet('pala_az',     fabOn(fabAz) ? '1' : '0');
   }
 
   function applyDisplayPrefs() {
-    const nightOn = toggleNight.checked;
+    const nightOn = fabOn(fabNight);
     if (nightOn) document.documentElement.dataset.night = '1';
     else delete document.documentElement.dataset.night;
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) themeMeta.setAttribute('content', nightOn ? '#0a0200' : '#080c18');
     sky.setNightMode(nightOn);
-    sky.setShowConstellations(toggleConst.checked);
-    sky.setShowConstellationArt(toggleArt.checked);
+    sky.setShowConstellations(fabOn(fabConst));
+    sky.setShowConstellationArt(fabOn(fabArt));
+    sky.setShowAzimuthRays(fabOn(fabAz));
   }
 
-  function onDisplayToggle(el) {
-    el.setAttribute('aria-checked', el.checked ? 'true' : 'false');
+  function onFabClick(btn) {
+    setFab(btn, !fabOn(btn));
     applyDisplayPrefs();
     savePrefs();
   }
 
-  toggleNight.addEventListener('change', () => onDisplayToggle(toggleNight));
-  toggleConst.addEventListener('change', () => onDisplayToggle(toggleConst));
-  toggleArt.addEventListener('change', () => onDisplayToggle(toggleArt));
+  fabNight.addEventListener('click', () => onFabClick(fabNight));
+  fabConst.addEventListener('click', () => onFabClick(fabConst));
+  fabArt.addEventListener('click', () => onFabClick(fabArt));
+  fabAz.addEventListener('click', () => onFabClick(fabAz));
 
   /* ──────────────────────────────────────────────────────────
      Sheet management
@@ -196,7 +206,7 @@
     lastFocusSettings = document.activeElement;
     settingsOverlay.classList.add('open');
     settingsOverlay.setAttribute('aria-hidden', 'false');
-    setTimeout(() => toggleNight.focus(), 50);
+    setTimeout(() => bortleSlider.focus(), 50);
   }
 
   function closeSettings() {
@@ -699,22 +709,32 @@
 
   /**
    * Altitudine di sguardo da inclinazione telefono.
-   * beta ≈ 0 → telefono orizzontale (zenit); beta ≈ 90 → in piedi (orizzonte).
+   * Tenendo il telefono come finestra verso il cielo:
+   *   dritto in aria (beta ~90) → cielo alto / overview
+   *   inclinato verso l’orizzonte → fascia più bassa
+   *   troppo in basso / piatto → sotto orizzonte (-1)
+   * Ritorna null se il sensore manca; -1 se sotto l’orizzonte.
    */
   function lookAltFromEvent(e) {
     if (e == null || typeof e.beta !== 'number' || Number.isNaN(e.beta)) return null;
     const angle = screenOrientationOffset();
     let tilt;
     if (angle === 90 || angle === -90 || angle === 270) {
-      // Landscape: gamma misura l’inclinazione “su/giù” rispetto allo schermo
       if (typeof e.gamma !== 'number' || Number.isNaN(e.gamma)) return null;
+      // In landscape, gamma ~0 piatto, ~±90 più dritto
       tilt = Math.abs(e.gamma);
     } else {
       tilt = e.beta;
     }
-    // Solo cielo: 0° (zenit) … 90° (orizzonte); oltre = sotto orizzonte
-    tilt = Math.max(0, Math.min(120, tilt));
-    return Math.max(0, Math.min(90, 90 - tilt));
+
+    // Puntato verso il suolo (oltre la verticale)
+    if (tilt > 100) return -1;
+    // Quasi piatto / abbassato: non stai inquadrando il cielo
+    if (tilt < 18) return -1;
+
+    // tilt 18° → orizzonte (0°), tilt 90° → zenit (90°)  [invertito rispetto a 90−beta]
+    const t = (Math.min(90, tilt) - 18) / (90 - 18);
+    return Math.max(0, Math.min(90, t * 90));
   }
 
   /** Posizione alt-az del Grande Carro (media stelle nominate UMa). */
@@ -792,10 +812,14 @@
   }
 
   function updateFramingLabel(headAz, lookAlt) {
-    const name = framingConstellationName(headAz, lookAlt, sky.date, sky.observer);
     const feetAz = normalizeAz(headAz + 180);
-    calibrateText.textContent = name ? ('Inquadri: ' + name) : 'Muovi il telefono';
     orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
+    if (lookAlt < 0) {
+      calibrateText.textContent = 'Sotto l\'orizzonte';
+      return;
+    }
+    const name = framingConstellationName(headAz, lookAlt, sky.date, sky.observer);
+    calibrateText.textContent = name ? ('Inquadri: ' + name) : 'Muovi il telefono';
   }
 
   function applyDevicePose() {
@@ -804,10 +828,22 @@
     if (compassRawHeading == null) return;
 
     const targetAz = normalizeAz(compassRawHeading + compassOffset);
-    const rawAlt = compassRawLookAlt == null ? 45 : compassRawLookAlt;
+
+    // Sotto l’orizzonte: niente cielo
+    if (compassRawLookAlt != null && compassRawLookAlt < 0) {
+      compassSmoothAz = targetAz;
+      compassSmoothAlt = -1;
+      compassLastAz = targetAz;
+      compassLastAlt = -1;
+      sky.setLookDirection(targetAz, -1);
+      updateFramingLabel(targetAz, -1);
+      return;
+    }
+
+    const rawAlt = compassRawLookAlt == null ? 70 : compassRawLookAlt;
     const targetAlt = Math.max(0, Math.min(90, rawAlt + compassAltOffset));
 
-    if (compassSmoothAz == null) {
+    if (compassSmoothAz == null || compassSmoothAlt == null || compassSmoothAlt < 0) {
       compassSmoothAz = targetAz;
       compassSmoothAlt = targetAlt;
     } else {
@@ -817,7 +853,8 @@
     }
 
     const movedAz = compassLastAz == null || azDelta(compassSmoothAz, compassLastAz) >= COMPASS_DEADBAND_AZ;
-    const movedAlt = compassLastAlt == null || Math.abs(compassSmoothAlt - compassLastAlt) >= COMPASS_DEADBAND_ALT;
+    const movedAlt = compassLastAlt == null || compassLastAlt < 0 ||
+      Math.abs(compassSmoothAlt - compassLastAlt) >= COMPASS_DEADBAND_ALT;
     if (!movedAz && !movedAlt) return;
 
     compassLastAz = compassSmoothAz;
@@ -942,7 +979,8 @@
       return;
     }
     compassOffset = normalizeAz(truePos.az - compassRawHeading);
-    const phoneAlt = compassRawLookAlt == null ? 45 : compassRawLookAlt;
+    // Se il tilt dice “sotto”, usa un default alto (telefono in aria) per l’offset
+    const phoneAlt = (compassRawLookAlt == null || compassRawLookAlt < 0) ? 70 : compassRawLookAlt;
     compassAltOffset = truePos.alt - phoneAlt;
     compassSmoothAz = null;
     compassSmoothAlt = null;

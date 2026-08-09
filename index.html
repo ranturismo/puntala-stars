@@ -16,6 +16,17 @@
 
   <div id="orientation-note" aria-hidden="true">↓ mare (ovest)</div>
 
+  <aside id="view-toggles" aria-label="Opzioni vista">
+    <button type="button" class="view-fab" id="fab-night"
+            aria-pressed="false" title="Modalità notte" aria-label="Modalità notte">☾</button>
+    <button type="button" class="view-fab" id="fab-const"
+            aria-pressed="true" title="Linee costellazioni" aria-label="Linee costellazioni">△</button>
+    <button type="button" class="view-fab" id="fab-art"
+            aria-pressed="false" title="Figure mitologiche" aria-label="Figure mitologiche">✧</button>
+    <button type="button" class="view-fab" id="fab-az"
+            aria-pressed="false" title="Raggi azimut" aria-label="Linee verso l'azimut">✛</button>
+  </aside>
+
   <!-- ── Top info bar ────────────────────────────────────── -->
   <header id="info-bar" aria-label="Informazioni astronomiche">
     <div id="info-chips">
@@ -106,37 +117,6 @@
                 aria-label="Chiudi impostazioni">✕</button>
       </div>
       <div class="sheet-body">
-
-        <section class="settings-section">
-          <h3 class="settings-section-title">Visualizzazione</h3>
-          <label class="toggle-row" for="toggle-night">
-            <span class="toggle-text">
-              <span class="toggle-label">Modalità notte</span>
-              <span class="toggle-hint">Schermo rosso per preservare la visione notturna</span>
-            </span>
-            <input type="checkbox" id="toggle-night" class="toggle-input" role="switch"
-                   aria-checked="false">
-            <span class="toggle-switch" aria-hidden="true"></span>
-          </label>
-          <label class="toggle-row" for="toggle-const">
-            <span class="toggle-text">
-              <span class="toggle-label">Linee costellazioni</span>
-              <span class="toggle-hint">Linee e nomi che uniscono le stelle</span>
-            </span>
-            <input type="checkbox" id="toggle-const" class="toggle-input" role="switch"
-                   aria-checked="true" checked>
-            <span class="toggle-switch" aria-hidden="true"></span>
-          </label>
-          <label class="toggle-row" for="toggle-art">
-            <span class="toggle-text">
-              <span class="toggle-label">Figure mitologiche</span>
-              <span class="toggle-hint">Riempimento soft lungo la forma reale delle stelle</span>
-            </span>
-            <input type="checkbox" id="toggle-art" class="toggle-input" role="switch"
-                   aria-checked="false">
-            <span class="toggle-switch" aria-hidden="true"></span>
-          </label>
-        </section>
 
         <section class="settings-section">
           <h3 class="settings-section-title">Inquinamento luminoso</h3>

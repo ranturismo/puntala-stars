@@ -1,8 +1,9 @@
 // Sky rendering engine — astronomy calculations and canvas drawing
 
-/** Costellazioni mostrate nella vista panoramica (zoom basso). */
+/** Costellazioni mostrate nella vista panoramica (zoom basso / bussola). */
 const OVERVIEW_CONSTS = new Set(['UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr']);
-const OVERVIEW_ZOOM_FULL = 2.2;
+/** Solo con pinch manuale oltre questa soglia si sbloccano tutte. */
+const OVERVIEW_ZOOM_FULL = 3.5;
 const MAX_ZOOM = 12;
 
 window.SkyRenderer = class SkyRenderer {
@@ -31,8 +32,10 @@ window.SkyRenderer = class SkyRenderer {
     this.nightMode = false;
     this.showConstellations = true;
     this.showConstellationArt = false;
+    this.showAzimuthRays = false;
     this.lookFollow = false;
     this.lookAlt = 90;
+    this.belowHorizon = false;
 
     this.setupResize();
     this.computeStaticStars();
@@ -41,10 +44,15 @@ window.SkyRenderer = class SkyRenderer {
 
   /** True se la costellazione va disegnata a questo livello di zoom. */
   isConstVisibleInOverview(id) {
+    const hl = this.highlighted;
+    const isHL = !!(hl && hl.type === 'constellation' && hl.id === id);
+    // In bussola resta sempre il set snello (lo zoom automatico non deve aprire il casino)
+    if (this.lookFollow) {
+      return OVERVIEW_CONSTS.has(id) || isHL;
+    }
     if (this.zoom >= OVERVIEW_ZOOM_FULL) return true;
     if (OVERVIEW_CONSTS.has(id)) return true;
-    const hl = this.highlighted;
-    return !!(hl && hl.type === 'constellation' && hl.id === id);
+    return isHL;
   }
 
   setupResize() {
@@ -118,6 +126,11 @@ window.SkyRenderer = class SkyRenderer {
     this.render();
   }
 
+  setShowAzimuthRays(on) {
+    this.showAzimuthRays = !!on;
+    this.render();
+  }
+
   setTime(date) {
     this.date = new Date(date);
     this.render();
@@ -132,18 +145,31 @@ window.SkyRenderer = class SkyRenderer {
 
   /**
    * Orient the map to the phone look direction.
-   * headAz = azimuth the phone points to; lookAlt = altitude (0 = horizon, 90 = zenith).
-   * Tilting from zenith to horizon zooms/pans so that point stays near screen center.
+   * headAz = azimuth; lookAlt = altitude (0 = horizon, 90 = zenith).
+   * Pass lookAlt < 0 when the phone points below the horizon.
    */
   setLookDirection(headAz, lookAlt) {
     this.headAz = ((headAz % 360) + 360) % 360;
     this.feetAz = (this.headAz + 180) % 360;
-    this.lookAlt = Math.max(0, Math.min(90, lookAlt));
     this.lookFollow = true;
+
+    if (lookAlt < 0) {
+      this.belowHorizon = true;
+      this.lookAlt = -1;
+      this.zoom = 1;
+      this.panX = 0;
+      this.panY = 0;
+      this.radius = this.baseRadius;
+      this.render();
+      return;
+    }
+
+    this.belowHorizon = false;
+    this.lookAlt = Math.max(0, Math.min(90, lookAlt));
 
     // Zenith → overview; horizon → zoom into the rim and pan that band to center
     const t = 1 - (this.lookAlt / 90); // 0 zenith … 1 horizon
-    this.zoom = 1 + t * 5; // ~1 … 6
+    this.zoom = 1 + t * 3.2; // ~1 … 4.2
     this.radius = this.baseRadius * this.zoom;
 
     // With headAz aligned, look point sits on the +Y axis of the disc at radius r
@@ -156,6 +182,7 @@ window.SkyRenderer = class SkyRenderer {
 
   clearLookFollow() {
     this.lookFollow = false;
+    this.belowHorizon = false;
     this.lookAlt = 90;
     this.zoom = 1;
     this.panX = 0;
@@ -266,6 +293,17 @@ window.SkyRenderer = class SkyRenderer {
 
     this.drawBackground(ctx, w, h);
 
+    if (this.belowHorizon) {
+      this.drawHorizon(ctx, cx, cy, R, headAz);
+      ctx.fillStyle = 'rgba(180,200,240,0.45)';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Sotto l\'orizzonte', this.centerX, this.centerY);
+      ctx.restore();
+      return;
+    }
+
     // Compute positions
     const sunEqu = Astronomy.Equator(Astronomy.Body.Sun, d, obs, true, true);
     const sunHor = Astronomy.Horizon(d, obs, sunEqu.ra, sunEqu.dec, 'normal');
@@ -298,8 +336,11 @@ window.SkyRenderer = class SkyRenderer {
       }
     }
 
-    // Draw horizon ring and cardinal points
+    // Draw horizon ring, azimuth rays and cardinal points
     this.drawHorizon(ctx, cx, cy, R, headAz);
+    if (this.showAzimuthRays) {
+      this.drawAzimuthRays(ctx, cx, cy, R, headAz);
+    }
 
     // Draw stars
     this.drawStars(ctx, cx, cy, R, headAz, d, obs, sunAlt);
@@ -430,6 +471,39 @@ window.SkyRenderer = class SkyRenderer {
       const y = cy - (R + 14) * Math.cos(angle);
       ctx.fillText(c.label, x, y);
     }
+    ctx.restore();
+  }
+
+  /** Radial lines from zenith to horizon for N/E/S/W (+ intercardinals faint). */
+  drawAzimuthRays(ctx, cx, cy, R, headAz) {
+    const rays = [
+      { az: 0, major: true },
+      { az: 45, major: false },
+      { az: 90, major: true },
+      { az: 135, major: false },
+      { az: 180, major: true },
+      { az: 225, major: false },
+      { az: 270, major: true },
+      { az: 315, major: false },
+    ];
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const ray of rays) {
+      const a = this.azToScreen(ray.az);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx - R * Math.sin(a), cy - R * Math.cos(a));
+      ctx.strokeStyle = ray.major
+        ? 'rgba(126,184,255,0.28)'
+        : 'rgba(126,184,255,0.12)';
+      ctx.lineWidth = ray.major ? 1.25 : 0.7;
+      ctx.stroke();
+    }
+    // Soft hub at zenith
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(126,184,255,0.35)';
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1127,6 +1201,7 @@ window.SkyRenderer = class SkyRenderer {
 
   resetView() {
     this.lookFollow = false;
+    this.belowHorizon = false;
     this.lookAlt = 90;
     this.zoom = 1;
     this.panX = 0;
