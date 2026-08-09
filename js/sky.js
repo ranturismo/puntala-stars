@@ -1,7 +1,10 @@
 // Sky rendering engine — astronomy calculations and canvas drawing
 
 /** Costellazioni mostrate nella vista panoramica (zoom basso / bussola). */
-const OVERVIEW_CONSTS = new Set(['UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr']);
+const OVERVIEW_CONSTS = new Set([
+  'UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr',
+  'Peg', 'Del', 'Her', 'Boo', 'CrB',
+]);
 /** Solo con pinch manuale oltre questa soglia si sbloccano tutte. */
 const OVERVIEW_ZOOM_FULL = 3.5;
 const MAX_ZOOM = 12;
@@ -33,6 +36,7 @@ window.SkyRenderer = class SkyRenderer {
     this.showConstellations = true;
     this.showConstellationArt = false;
     this.showAzimuthRays = false;
+    this.showStarNames = true;
     this.lookFollow = false;
     this.lookAlt = 90;
     this.belowHorizon = false;
@@ -128,6 +132,11 @@ window.SkyRenderer = class SkyRenderer {
 
   setShowAzimuthRays(on) {
     this.showAzimuthRays = !!on;
+    this.render();
+  }
+
+  setShowStarNames(on) {
+    this.showStarNames = !!on;
     this.render();
   }
 
@@ -587,7 +596,7 @@ window.SkyRenderer = class SkyRenderer {
           ctx.fill();
         }
 
-        if (nameIdx > 0 && hor.altitude > 5 && mag <= labelLimit) {
+        if (this.showStarNames && nameIdx > 0 && hor.altitude > 5 && mag <= labelLimit) {
           const nameAlpha = hl ? (highlightGlow ? 0.9 : alpha * 0.5) : alpha * 0.8;
           if (nameAlpha >= 0.05) {
             pendingLabels.push({
@@ -820,7 +829,7 @@ window.SkyRenderer = class SkyRenderer {
         baseAlpha = isHL ? 0.55 : baseAlpha * 0.3;
       }
       ctx.strokeStyle = `rgba(120,150,200,${baseAlpha.toFixed(2)})`;
-      ctx.lineWidth = isHL ? 1.4 : 0.6;
+      ctx.lineWidth = isHL ? 2.0 : 1.1;
 
       for (let i = 0; i < segs.length; i += 4) {
         const ra1 = segs[i];

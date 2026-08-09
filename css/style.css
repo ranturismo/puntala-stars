@@ -208,14 +208,14 @@ canvas#sky {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   width: 100%;
-  min-height: 36px;
-  padding: 4px 8px 4px 12px;
+  min-height: 40px;
+  padding: 6px 12px 6px 10px;
   border-radius: var(--r-md);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-mid);
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .calibrate-prompt[hidden] {
@@ -240,12 +240,50 @@ canvas#sky {
   font-weight: 500;
 }
 
-.btn-calibrate {
+/* Pitch bubble — zenit (top) ↔ orizzonte (bottom) */
+.pitch-bolla {
   flex-shrink: 0;
-  min-height: 32px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 22px;
+}
+
+.pitch-bolla-mark {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1;
+}
+
+.pitch-bolla-track {
+  position: relative;
+  width: 8px;
+  height: 36px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-dim);
+  overflow: hidden;
+}
+
+.pitch-bolla-dot {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--accent-b);
+  box-shadow: 0 0 6px rgba(126, 184, 255, 0.45);
+  transition: top 80ms linear, background 120ms ease;
+}
+
+.pitch-bolla.is-below .pitch-bolla-dot {
+  background: rgba(255, 140, 100, 0.9);
+  box-shadow: 0 0 6px rgba(255, 100, 60, 0.4);
 }
 
 html[data-night="1"] .calibrate-prompt {
@@ -255,6 +293,11 @@ html[data-night="1"] .calibrate-prompt {
 
 html[data-night="1"] .calibrate-prompt.is-following #calibrate-text {
   color: rgba(255, 120, 80, 0.95);
+}
+
+html[data-night="1"] .pitch-bolla-dot {
+  background: rgba(255, 140, 100, 0.95);
+  box-shadow: 0 0 6px rgba(255, 80, 40, 0.45);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -313,6 +356,12 @@ html[data-night="1"] .calibrate-prompt.is-following #calibrate-text {
   border-color: var(--accent-b-brd);
   background: var(--accent-b-bg);
   color: var(--accent-b);
+}
+
+#fab-names {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
 }
 
 html[data-night="1"] .view-fab {

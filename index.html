@@ -21,6 +21,8 @@
             aria-pressed="false" title="Modalità notte" aria-label="Modalità notte">☾</button>
     <button type="button" class="view-fab" id="fab-const"
             aria-pressed="true" title="Linee costellazioni" aria-label="Linee costellazioni">△</button>
+    <button type="button" class="view-fab" id="fab-names"
+            aria-pressed="true" title="Nomi delle stelle" aria-label="Nomi delle stelle">Aa</button>
     <button type="button" class="view-fab" id="fab-art"
             aria-pressed="false" title="Figure mitologiche" aria-label="Figure mitologiche">✧</button>
     <button type="button" class="view-fab" id="fab-az"
@@ -48,8 +50,14 @@
   <!-- ── Bottom dock ─────────────────────────────────────── -->
   <div id="dock">
     <div id="calibrate-prompt" class="calibrate-prompt" hidden aria-hidden="true">
-      <span id="calibrate-text">Punta il Grande Carro</span>
-      <button type="button" id="btn-calibrate" class="btn btn-accent btn-calibrate">Calibra</button>
+      <div id="pitch-bolla" class="pitch-bolla" aria-hidden="true" title="Inclinazione">
+        <span class="pitch-bolla-mark" aria-hidden="true">Z</span>
+        <div class="pitch-bolla-track">
+          <div id="pitch-bolla-dot" class="pitch-bolla-dot"></div>
+        </div>
+        <span class="pitch-bolla-mark" aria-hidden="true">O</span>
+      </div>
+      <span id="calibrate-text">Muovi il telefono</span>
     </div>
     <div id="time-row">
       <span id="hour-label" aria-live="polite">22:30</span>
@@ -62,8 +70,8 @@
       <div class="action-group">
         <button id="btn-play" class="btn btn-icon" aria-label="Riproduci animazione">▶</button>
         <button id="btn-now" class="btn btn-ghost">Adesso</button>
-        <button id="btn-compass" class="btn btn-icon" aria-label="Punta e calibra"
-                aria-pressed="false" title="Punta e calibra">◎</button>
+        <button id="btn-compass" class="btn btn-icon" aria-label="Punta il cielo"
+                aria-pressed="false" title="Punta il cielo">◎</button>
         <span id="speed-label" aria-hidden="true" style="display:none">33 min/s</span>
       </div>
       <div class="action-group">

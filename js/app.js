@@ -58,7 +58,8 @@
   const orientationNote = document.getElementById('orientation-note');
   const calibratePrompt = document.getElementById('calibrate-prompt');
   const calibrateText   = document.getElementById('calibrate-text');
-  const btnCalibrate    = document.getElementById('btn-calibrate');
+  const pitchBolla      = document.getElementById('pitch-bolla');
+  const pitchBollaDot   = document.getElementById('pitch-bolla-dot');
 
   // Info bar
   const infoSunText     = document.getElementById('info-sun-text');
@@ -90,6 +91,7 @@
   const maskWestVal      = document.getElementById('mask-west-val');
   const fabNight = document.getElementById('fab-night');
   const fabConst = document.getElementById('fab-const');
+  const fabNames = document.getElementById('fab-names');
   const fabArt   = document.getElementById('fab-art');
   const fabAz    = document.getElementById('fab-az');
 
@@ -141,6 +143,7 @@
     maskWest.value = parseInt(storageGet('pala_west', '0'), 10);
     setFab(fabNight, storageGet('pala_night', '0') === '1');
     setFab(fabConst, storageGet('pala_const', '1') !== '0');
+    setFab(fabNames, storageGet('pala_names', '1') !== '0');
     setFab(fabArt, storageGet('pala_art', '0') === '1');
     setFab(fabAz, storageGet('pala_az', '0') === '1');
     updateMaskValues();
@@ -154,6 +157,7 @@
     storageSet('pala_west',   maskWest.value);
     storageSet('pala_night',  fabOn(fabNight) ? '1' : '0');
     storageSet('pala_const',  fabOn(fabConst) ? '1' : '0');
+    storageSet('pala_names',  fabOn(fabNames) ? '1' : '0');
     storageSet('pala_art',    fabOn(fabArt) ? '1' : '0');
     storageSet('pala_az',     fabOn(fabAz) ? '1' : '0');
   }
@@ -166,6 +170,7 @@
     if (themeMeta) themeMeta.setAttribute('content', nightOn ? '#0a0200' : '#080c18');
     sky.setNightMode(nightOn);
     sky.setShowConstellations(fabOn(fabConst));
+    sky.setShowStarNames(fabOn(fabNames));
     sky.setShowConstellationArt(fabOn(fabArt));
     sky.setShowAzimuthRays(fabOn(fabAz));
   }
@@ -178,6 +183,7 @@
 
   fabNight.addEventListener('click', () => onFabClick(fabNight));
   fabConst.addEventListener('click', () => onFabClick(fabConst));
+  fabNames.addEventListener('click', () => onFabClick(fabNames));
   fabArt.addEventListener('click', () => onFabClick(fabArt));
   fabAz.addEventListener('click', () => onFabClick(fabAz));
 
@@ -650,7 +656,7 @@
   });
 
   /* ──────────────────────────────────────────────────────────
-     Compass — calibrate on Grande Carro, then follow heading+tilt
+     Compass — follow heading + pitch (bolla), no calibration
   ────────────────────────────────────────────────────────── */
   const FIXED_HEAD_AZ = 90; // top of screen = east (feet toward mare / west)
   const CARDINAL_IT = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -659,7 +665,7 @@
   const COMPASS_DEADBAND_ALT = 0.8;
   const FRAMING_MAX_ANG = 32;
 
-  /** off | waiting | following */
+  /** off | following */
   let compassMode = 'off';
   let compassRawHeading = null;
   let compassRawLookAlt = null;
@@ -667,12 +673,9 @@
   let compassSmoothAlt = null;
   let compassLastAz = null;
   let compassLastAlt = null;
-  let compassOffset = 0;
-  let compassAltOffset = 0;
   let compassGotAbsolute = false;
   let compassAbsoluteHandler = null;
   let compassRelativeHandler = null;
-  let compassHeldHighlight = false;
 
   function normalizeAz(az) {
     return ((az % 360) + 360) % 360;
@@ -708,11 +711,10 @@
   }
 
   /**
-   * Altitudine di sguardo da inclinazione telefono.
-   * Tenendo il telefono come finestra verso il cielo:
-   *   dritto in aria (beta ~90) → cielo alto / overview
-   *   inclinato verso l’orizzonte → fascia più bassa
-   *   troppo in basso / piatto → sotto orizzonte (-1)
+   * Altitudine di sguardo da inclinazione telefono (stile AR):
+   *   telefono piatto / punta in alto (tilt ~0) → zenit (90°)
+   *   telefono dritto (tilt ~90) → orizzonte (0°)
+   *   oltre la verticale verso il suolo → sotto orizzonte (-1)
    * Ritorna null se il sensore manca; -1 se sotto l’orizzonte.
    */
   function lookAltFromEvent(e) {
@@ -721,56 +723,17 @@
     let tilt;
     if (angle === 90 || angle === -90 || angle === 270) {
       if (typeof e.gamma !== 'number' || Number.isNaN(e.gamma)) return null;
-      // In landscape, gamma ~0 piatto, ~±90 più dritto
+      // Landscape: |gamma| ~0 piatto (zenit), ~90 dritto (orizzonte)
       tilt = Math.abs(e.gamma);
     } else {
       tilt = e.beta;
     }
 
-    // Puntato verso il suolo (oltre la verticale)
-    if (tilt > 100) return -1;
-    // Quasi piatto / abbassato: non stai inquadrando il cielo
-    if (tilt < 18) return -1;
+    // Inclinato in avanti / verso il suolo
+    if (tilt < -5 || tilt > 95) return -1;
 
-    // tilt 18° → orizzonte (0°), tilt 90° → zenit (90°)  [invertito rispetto a 90−beta]
-    const t = (Math.min(90, tilt) - 18) / (90 - 18);
-    return Math.max(0, Math.min(90, t * 90));
-  }
-
-  /** Posizione alt-az del Grande Carro (media stelle nominate UMa). */
-  function getGrandeCarroPos(date, obs) {
-    const indices = (typeof CONSTELLATION_STAR_INDICES !== 'undefined' && CONSTELLATION_STAR_INDICES.UMa)
-      ? CONSTELLATION_STAR_INDICES.UMa
-      : [];
-    let sinSum = 0;
-    let cosSum = 0;
-    let altSum = 0;
-    let n = 0;
-    if (indices.length && typeof STARS !== 'undefined') {
-      for (const star of STARS) {
-        const nameIdx = star[3];
-        if (nameIdx <= 0 || !indices.includes(nameIdx - 1)) continue;
-        try {
-          const ra = star[0] / 1000;
-          const dec = star[1] / 1000;
-          const hor = Astronomy.Horizon(date, obs, ra / 15, dec, 'normal');
-          const rad = hor.azimuth * Math.PI / 180;
-          sinSum += Math.sin(rad);
-          cosSum += Math.cos(rad);
-          altSum += hor.altitude;
-          n++;
-        } catch (err) { /* skip */ }
-      }
-    }
-    if (n > 0) {
-      return {
-        az: normalizeAz(Math.atan2(sinSum, cosSum) * 180 / Math.PI),
-        alt: altSum / n,
-      };
-    }
-    const info = CONST_NAMES_IT.UMa;
-    const hor = Astronomy.Horizon(date, obs, info.ra / 15, info.dec, 'normal');
-    return { az: hor.azimuth, alt: hor.altitude };
+    const clamped = Math.max(0, Math.min(90, tilt));
+    return 90 - clamped;
   }
 
   /** Costellazione più vicina alla direzione di sguardo (az + alt). */
@@ -793,29 +756,40 @@
     return bestName;
   }
 
-  function showCalibratePrompt(following) {
+  function showPointPrompt() {
     calibratePrompt.hidden = false;
     calibratePrompt.setAttribute('aria-hidden', 'false');
-    calibratePrompt.classList.toggle('is-following', !!following);
-    if (following) {
-      btnCalibrate.textContent = 'Ricalibra';
-    } else {
-      calibrateText.textContent = 'Punta il Grande Carro';
-      btnCalibrate.textContent = 'Calibra';
-    }
+    calibratePrompt.classList.add('is-following');
   }
 
-  function hideCalibratePrompt() {
+  function hidePointPrompt() {
     calibratePrompt.hidden = true;
     calibratePrompt.setAttribute('aria-hidden', 'true');
     calibratePrompt.classList.remove('is-following');
+    if (pitchBolla) pitchBolla.classList.remove('is-below');
+  }
+
+  function updatePitchBolla(lookAlt) {
+    if (!pitchBollaDot || !pitchBolla) return;
+    const below = lookAlt < 0;
+    pitchBolla.classList.toggle('is-below', below);
+    const t = below ? 0 : Math.max(0, Math.min(1, lookAlt / 90));
+    // track verticale: zenit in alto, orizzonte in basso (margine per il raggio del dot)
+    pitchBollaDot.style.top = (12 + (1 - t) * 76) + '%';
   }
 
   function updateFramingLabel(headAz, lookAlt) {
-    const feetAz = normalizeAz(headAz + 180);
-    orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
+    if (headAz != null) {
+      const feetAz = normalizeAz(headAz + 180);
+      orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
+    }
+    updatePitchBolla(lookAlt);
     if (lookAlt < 0) {
       calibrateText.textContent = 'Sotto l\'orizzonte';
+      return;
+    }
+    if (headAz == null) {
+      calibrateText.textContent = 'Muovi il telefono';
       return;
     }
     const name = framingConstellationName(headAz, lookAlt, sky.date, sky.observer);
@@ -823,11 +797,15 @@
   }
 
   function applyDevicePose() {
-    // Prima della calibrazione: solo memorizza raw heading/tilt
     if (compassMode !== 'following') return;
-    if (compassRawHeading == null) return;
 
-    const targetAz = normalizeAz(compassRawHeading + compassOffset);
+    // Pitch disponibile prima della bussola: aggiorna solo la bolla
+    if (compassRawHeading == null) {
+      if (compassRawLookAlt != null) updateFramingLabel(null, compassRawLookAlt);
+      return;
+    }
+
+    const targetAz = normalizeAz(compassRawHeading);
 
     // Sotto l’orizzonte: niente cielo
     if (compassRawLookAlt != null && compassRawLookAlt < 0) {
@@ -840,8 +818,7 @@
       return;
     }
 
-    const rawAlt = compassRawLookAlt == null ? 70 : compassRawLookAlt;
-    const targetAlt = Math.max(0, Math.min(90, rawAlt + compassAltOffset));
+    const targetAlt = compassRawLookAlt == null ? 70 : Math.max(0, Math.min(90, compassRawLookAlt));
 
     if (compassSmoothAz == null || compassSmoothAlt == null || compassSmoothAlt < 0) {
       compassSmoothAz = targetAz;
@@ -855,7 +832,10 @@
     const movedAz = compassLastAz == null || azDelta(compassSmoothAz, compassLastAz) >= COMPASS_DEADBAND_AZ;
     const movedAlt = compassLastAlt == null || compassLastAlt < 0 ||
       Math.abs(compassSmoothAlt - compassLastAlt) >= COMPASS_DEADBAND_ALT;
-    if (!movedAz && !movedAlt) return;
+    if (!movedAz && !movedAlt) {
+      updatePitchBolla(compassSmoothAlt);
+      return;
+    }
 
     compassLastAz = compassSmoothAz;
     compassLastAlt = compassSmoothAlt;
@@ -868,18 +848,11 @@
     if (alt != null) compassRawLookAlt = alt;
 
     if (fromAbsolute) {
-      // Se già calibrati su relative, ignora heading absolute tardivo (evita salti)
-      if (compassMode === 'following' && !compassGotAbsolute) {
-        applyDevicePose();
-        return;
-      }
       const h = headingFromEvent(e);
-      if (h == null) {
-        applyDevicePose();
-        return;
+      if (h != null) {
+        compassGotAbsolute = true;
+        compassRawHeading = h;
       }
-      compassGotAbsolute = true;
-      compassRawHeading = h;
       applyDevicePose();
       return;
     }
@@ -912,8 +885,6 @@
     compassSmoothAlt = null;
     compassLastAz = null;
     compassLastAlt = null;
-    compassOffset = 0;
-    compassAltOffset = 0;
     compassGotAbsolute = false;
     if (compassAbsoluteHandler) {
       window.removeEventListener('deviceorientationabsolute', compassAbsoluteHandler);
@@ -924,29 +895,23 @@
       compassRelativeHandler = null;
     }
     btnCompass.setAttribute('aria-pressed', 'false');
-    btnCompass.setAttribute('aria-label', 'Punta e calibra');
-    btnCompass.title = 'Punta e calibra';
-    hideCalibratePrompt();
-    if (compassHeldHighlight) {
-      clearHighlight();
-      compassHeldHighlight = false;
-    }
+    btnCompass.setAttribute('aria-label', 'Punta il cielo');
+    btnCompass.title = 'Punta il cielo';
+    hidePointPrompt();
     sky.setOrientation(FIXED_HEAD_AZ);
     sky.clearLookFollow();
     orientationNote.style.display = '';
     orientationNote.textContent = '↓ mare (ovest)';
   }
 
-  function startCompassWaiting() {
-    compassMode = 'waiting';
+  function startCompassFollow() {
+    compassMode = 'following';
     compassRawHeading = null;
     compassRawLookAlt = null;
     compassSmoothAz = null;
     compassSmoothAlt = null;
     compassLastAz = null;
     compassLastAlt = null;
-    compassOffset = 0;
-    compassAltOffset = 0;
     compassGotAbsolute = false;
     compassAbsoluteHandler = onAbsoluteOrientation;
     compassRelativeHandler = onRelativeOrientation;
@@ -955,45 +920,10 @@
     btnCompass.setAttribute('aria-pressed', 'true');
     btnCompass.setAttribute('aria-label', 'Disattiva puntamento');
     btnCompass.title = 'Disattiva puntamento';
-    // Cielo fermo; evidenzia il Grande Carro come riferimento
-    sky.clearLookFollow();
-    sky.setOrientation(FIXED_HEAD_AZ);
-    clearAllHighlightClasses();
-    sky.setHighlighted({ type: 'constellation', id: 'UMa' });
-    compassHeldHighlight = true;
-    showCalibratePrompt(false);
-    orientationNote.style.display = 'none';
-  }
-
-  function calibrateNow() {
-    if (compassMode === 'off') return;
-    if (compassRawHeading == null) {
-      calibrateText.textContent = 'Attendi il sensore…';
-      return;
-    }
-    let truePos;
-    try {
-      truePos = getGrandeCarroPos(sky.date, sky.observer);
-    } catch (err) {
-      calibrateText.textContent = 'Calibrazione fallita';
-      return;
-    }
-    compassOffset = normalizeAz(truePos.az - compassRawHeading);
-    // Se il tilt dice “sotto”, usa un default alto (telefono in aria) per l’offset
-    const phoneAlt = (compassRawLookAlt == null || compassRawLookAlt < 0) ? 70 : compassRawLookAlt;
-    compassAltOffset = truePos.alt - phoneAlt;
-    compassSmoothAz = null;
-    compassSmoothAlt = null;
-    compassLastAz = null;
-    compassLastAlt = null;
-    compassMode = 'following';
-    if (compassHeldHighlight) {
-      clearHighlight();
-      compassHeldHighlight = false;
-    }
     orientationNote.style.display = '';
-    showCalibratePrompt(true);
-    applyDevicePose();
+    showPointPrompt();
+    calibrateText.textContent = 'Muovi il telefono';
+    updatePitchBolla(70);
   }
 
   async function requestCompassPermission() {
@@ -1024,11 +954,7 @@
       orientationNote.textContent = 'permesso bussola negato';
       return;
     }
-    startCompassWaiting();
-  });
-
-  btnCalibrate.addEventListener('click', () => {
-    calibrateNow();
+    startCompassFollow();
   });
 
   /* ──────────────────────────────────────────────────────────
