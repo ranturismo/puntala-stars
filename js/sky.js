@@ -1,4 +1,9 @@
 // Sky rendering engine — astronomy calculations and canvas drawing
+
+/** Costellazioni mostrate nella vista panoramica (zoom basso). */
+const OVERVIEW_CONSTS = new Set(['UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr']);
+const OVERVIEW_ZOOM_FULL = 2.2;
+
 window.SkyRenderer = class SkyRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -29,6 +34,14 @@ window.SkyRenderer = class SkyRenderer {
     this.setupResize();
     this.computeStaticStars();
     this.setupZoom();
+  }
+
+  /** True se la costellazione va disegnata a questo livello di zoom. */
+  isConstVisibleInOverview(id) {
+    if (this.zoom >= OVERVIEW_ZOOM_FULL) return true;
+    if (OVERVIEW_CONSTS.has(id)) return true;
+    const hl = this.highlighted;
+    return !!(hl && hl.type === 'constellation' && hl.id === id);
   }
 
   setupResize() {
@@ -619,6 +632,7 @@ window.SkyRenderer = class SkyRenderer {
 
     for (const c of CONST_LINES) {
       if (mythIds && !mythIds.has(c.id)) continue;
+      if (!this.isConstVisibleInOverview(c.id)) continue;
 
       const segs = c.s;
       const pts = [];
@@ -687,6 +701,7 @@ window.SkyRenderer = class SkyRenderer {
     const hl = this.highlighted;
 
     for (const c of CONST_LINES) {
+      if (!this.isConstVisibleInOverview(c.id)) continue;
       const isHL = hl && hl.type === 'constellation' && hl.id === c.id;
       const segs = c.s;
       let baseAlpha = sunAlt > -8 ? 0.08 : 0.25;
@@ -741,6 +756,7 @@ window.SkyRenderer = class SkyRenderer {
     const hl = this.highlighted;
 
     for (const [desig, info] of Object.entries(CONST_NAMES_IT)) {
+      if (!this.isConstVisibleInOverview(desig)) continue;
       try {
         const hor = Astronomy.Horizon(date, obs, info.ra / 15, info.dec, 'normal');
         if (hor.altitude < 2) continue;

@@ -16,6 +16,11 @@
 
   <div id="orientation-note" aria-hidden="true">↓ mare (ovest)</div>
 
+  <div id="calibrate-prompt" class="calibrate-prompt" hidden aria-hidden="true">
+    <p id="calibrate-text">Punta il telefono verso il Grande Carro, poi premi Calibra</p>
+    <button type="button" id="btn-calibrate" class="btn btn-accent">Calibra</button>
+  </div>
+
   <!-- ── Top info bar ────────────────────────────────────── -->
   <header id="info-bar" aria-label="Informazioni astronomiche">
     <div id="info-chips">
@@ -47,8 +52,8 @@
       <div class="action-group">
         <button id="btn-play" class="btn btn-icon" aria-label="Riproduci animazione">▶</button>
         <button id="btn-now" class="btn btn-ghost">Adesso</button>
-        <button id="btn-compass" class="btn btn-icon" aria-label="Segui bussola"
-                aria-pressed="false" title="Segui bussola">◎</button>
+        <button id="btn-compass" class="btn btn-icon" aria-label="Punta e calibra"
+                aria-pressed="false" title="Punta e calibra">◎</button>
         <span id="speed-label" aria-hidden="true" style="display:none">33 min/s</span>
       </div>
       <div class="action-group">
