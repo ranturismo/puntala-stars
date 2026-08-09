@@ -3,6 +3,7 @@
 /** Costellazioni mostrate nella vista panoramica (zoom basso). */
 const OVERVIEW_CONSTS = new Set(['UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr']);
 const OVERVIEW_ZOOM_FULL = 2.2;
+const MAX_ZOOM = 12;
 
 window.SkyRenderer = class SkyRenderer {
   constructor(canvas) {
@@ -30,6 +31,8 @@ window.SkyRenderer = class SkyRenderer {
     this.nightMode = false;
     this.showConstellations = true;
     this.showConstellationArt = false;
+    this.lookFollow = false;
+    this.lookAlt = 90;
 
     this.setupResize();
     this.computeStaticStars();
@@ -124,6 +127,40 @@ window.SkyRenderer = class SkyRenderer {
   setOrientation(headAz) {
     this.headAz = ((headAz % 360) + 360) % 360;
     this.feetAz = (this.headAz + 180) % 360;
+    this.render();
+  }
+
+  /**
+   * Orient the map to the phone look direction.
+   * headAz = azimuth the phone points to; lookAlt = altitude (0 = horizon, 90 = zenith).
+   * Tilting from zenith to horizon zooms/pans so that point stays near screen center.
+   */
+  setLookDirection(headAz, lookAlt) {
+    this.headAz = ((headAz % 360) + 360) % 360;
+    this.feetAz = (this.headAz + 180) % 360;
+    this.lookAlt = Math.max(0, Math.min(90, lookAlt));
+    this.lookFollow = true;
+
+    // Zenith → overview; horizon → zoom into the rim and pan that band to center
+    const t = 1 - (this.lookAlt / 90); // 0 zenith … 1 horizon
+    this.zoom = 1 + t * 5; // ~1 … 6
+    this.radius = this.baseRadius * this.zoom;
+
+    // With headAz aligned, look point sits on the +Y axis of the disc at radius r
+    const r = ((90 - this.lookAlt) / 90) * this.radius;
+    this.panX = 0;
+    this.panY = r;
+    this.clampPan();
+    this.render();
+  }
+
+  clearLookFollow() {
+    this.lookFollow = false;
+    this.lookAlt = 90;
+    this.zoom = 1;
+    this.panX = 0;
+    this.panY = 0;
+    this.radius = this.baseRadius;
     this.render();
   }
 
@@ -398,8 +435,8 @@ window.SkyRenderer = class SkyRenderer {
 
   /** Max magnitude for star name labels — deeper names appear as you zoom in. */
   labelMagLimit() {
-    // zoom 1 → 2.5, zoom 6 → ~4.5 (also capped by sky limiting magnitude)
-    const byZoom = 2.5 + (this.zoom - 1) * 0.4;
+    // zoom 1 → 2.5, zoom 12 → ~4.7 (also capped by sky limiting magnitude)
+    const byZoom = 2.5 + (this.zoom - 1) * 0.2;
     return Math.min(this.limitingMag, byZoom);
   }
 
@@ -1006,7 +1043,7 @@ window.SkyRenderer = class SkyRenderer {
         const s = this._pinchStart;
 
         const zoomFactor = dist / s.startDist;
-        this.zoom = Math.max(1, Math.min(6, s.startZoom * zoomFactor));
+        this.zoom = Math.max(1, Math.min(MAX_ZOOM, s.startZoom * zoomFactor));
 
         const oldR = this.baseRadius * s.startZoom;
         const newR = this.baseRadius * this.zoom;
@@ -1059,7 +1096,7 @@ window.SkyRenderer = class SkyRenderer {
 
   zoomAt(fx, fy, factor) {
     const oldZoom = this.zoom;
-    this.zoom = Math.max(1, Math.min(6, this.zoom * factor));
+    this.zoom = Math.max(1, Math.min(MAX_ZOOM, this.zoom * factor));
     const oldR = this.baseRadius * oldZoom;
     const newR = this.baseRadius * this.zoom;
 
@@ -1083,12 +1120,14 @@ window.SkyRenderer = class SkyRenderer {
   }
 
   clampPan() {
-    const maxPan = this.radius * 0.7;
+    const maxPan = this.lookFollow ? this.radius * 1.05 : this.radius * 0.7;
     this.panX = Math.max(-maxPan, Math.min(maxPan, this.panX));
     this.panY = Math.max(-maxPan, Math.min(maxPan, this.panY));
   }
 
   resetView() {
+    this.lookFollow = false;
+    this.lookAlt = 90;
     this.zoom = 1;
     this.panX = 0;
     this.panY = 0;

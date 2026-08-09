@@ -205,24 +205,17 @@ canvas#sky {
 }
 
 .calibrate-prompt {
-  position: absolute;
-  bottom: calc(148px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 8;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: var(--sp-2);
-  max-width: min(320px, calc(100% - 2 * var(--sp-4)));
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--r-lg);
-  background: rgba(4, 7, 18, 0.72);
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 8px 4px 12px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-mid);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
-  text-align: center;
 }
 
 .calibrate-prompt[hidden] {
@@ -231,9 +224,15 @@ canvas#sky {
 
 #calibrate-text {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.2;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
 }
 
 .calibrate-prompt.is-following #calibrate-text {
@@ -241,8 +240,16 @@ canvas#sky {
   font-weight: 500;
 }
 
+.btn-calibrate {
+  flex-shrink: 0;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 html[data-night="1"] .calibrate-prompt {
-  background: rgba(12, 2, 0, 0.78);
+  background: rgba(255, 60, 20, 0.10);
   border-color: rgba(255, 80, 40, 0.28);
 }
 

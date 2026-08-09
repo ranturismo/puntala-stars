@@ -640,20 +640,25 @@
   });
 
   /* ──────────────────────────────────────────────────────────
-     Compass — calibrate on Grande Carro, then follow heading
+     Compass — calibrate on Grande Carro, then follow heading+tilt
   ────────────────────────────────────────────────────────── */
   const FIXED_HEAD_AZ = 90; // top of screen = east (feet toward mare / west)
   const CARDINAL_IT = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
   const COMPASS_SMOOTH = 0.12;
-  const COMPASS_DEADBAND = 1.2;
-  const FRAMING_MAX_DELTA = 28;
+  const COMPASS_DEADBAND_AZ = 1.2;
+  const COMPASS_DEADBAND_ALT = 0.8;
+  const FRAMING_MAX_ANG = 32;
 
   /** off | waiting | following */
   let compassMode = 'off';
   let compassRawHeading = null;
-  let compassSmooth = null;
-  let compassLastApplied = null;
+  let compassRawLookAlt = null;
+  let compassSmoothAz = null;
+  let compassSmoothAlt = null;
+  let compassLastAz = null;
+  let compassLastAlt = null;
   let compassOffset = 0;
+  let compassAltOffset = 0;
   let compassGotAbsolute = false;
   let compassAbsoluteHandler = null;
   let compassRelativeHandler = null;
@@ -692,13 +697,34 @@
     return heading;
   }
 
-  /** Azimuth del Grande Carro (media circolare delle stelle nominate UMa). */
-  function getGrandeCarroAzimuth(date, obs) {
+  /**
+   * Altitudine di sguardo da inclinazione telefono.
+   * beta ≈ 0 → telefono orizzontale (zenit); beta ≈ 90 → in piedi (orizzonte).
+   */
+  function lookAltFromEvent(e) {
+    if (e == null || typeof e.beta !== 'number' || Number.isNaN(e.beta)) return null;
+    const angle = screenOrientationOffset();
+    let tilt;
+    if (angle === 90 || angle === -90 || angle === 270) {
+      // Landscape: gamma misura l’inclinazione “su/giù” rispetto allo schermo
+      if (typeof e.gamma !== 'number' || Number.isNaN(e.gamma)) return null;
+      tilt = Math.abs(e.gamma);
+    } else {
+      tilt = e.beta;
+    }
+    // Solo cielo: 0° (zenit) … 90° (orizzonte); oltre = sotto orizzonte
+    tilt = Math.max(0, Math.min(120, tilt));
+    return Math.max(0, Math.min(90, 90 - tilt));
+  }
+
+  /** Posizione alt-az del Grande Carro (media stelle nominate UMa). */
+  function getGrandeCarroPos(date, obs) {
     const indices = (typeof CONSTELLATION_STAR_INDICES !== 'undefined' && CONSTELLATION_STAR_INDICES.UMa)
       ? CONSTELLATION_STAR_INDICES.UMa
       : [];
     let sinSum = 0;
     let cosSum = 0;
+    let altSum = 0;
     let n = 0;
     if (indices.length && typeof STARS !== 'undefined') {
       for (const star of STARS) {
@@ -711,28 +737,35 @@
           const rad = hor.azimuth * Math.PI / 180;
           sinSum += Math.sin(rad);
           cosSum += Math.cos(rad);
+          altSum += hor.altitude;
           n++;
         } catch (err) { /* skip */ }
       }
     }
     if (n > 0) {
-      return normalizeAz(Math.atan2(sinSum, cosSum) * 180 / Math.PI);
+      return {
+        az: normalizeAz(Math.atan2(sinSum, cosSum) * 180 / Math.PI),
+        alt: altSum / n,
+      };
     }
     const info = CONST_NAMES_IT.UMa;
-    return Astronomy.Horizon(date, obs, info.ra / 15, info.dec, 'normal').azimuth;
+    const hor = Astronomy.Horizon(date, obs, info.ra / 15, info.dec, 'normal');
+    return { az: hor.azimuth, alt: hor.altitude };
   }
 
-  /** Costellazione più vicina alla direzione in alto (headAz). */
-  function framingConstellationName(headAz, date, obs) {
+  /** Costellazione più vicina alla direzione di sguardo (az + alt). */
+  function framingConstellationName(headAz, lookAlt, date, obs) {
     let bestName = null;
-    let bestDelta = FRAMING_MAX_DELTA;
+    let bestAng = FRAMING_MAX_ANG;
     for (const info of Object.values(CONST_NAMES_IT)) {
       try {
         const hor = Astronomy.Horizon(date, obs, info.ra / 15, info.dec, 'normal');
-        if (hor.altitude < 5) continue;
-        const d = azDelta(hor.azimuth, headAz);
-        if (d < bestDelta) {
-          bestDelta = d;
+        if (hor.altitude < 0) continue;
+        const dAz = azDelta(hor.azimuth, headAz);
+        const dAlt = hor.altitude - lookAlt;
+        const ang = Math.hypot(dAz, dAlt);
+        if (ang < bestAng) {
+          bestAng = ang;
           bestName = info.n;
         }
       } catch (err) { /* skip */ }
@@ -747,7 +780,7 @@
     if (following) {
       btnCalibrate.textContent = 'Ricalibra';
     } else {
-      calibrateText.textContent = 'Punta il telefono verso il Grande Carro, poi premi Calibra';
+      calibrateText.textContent = 'Punta il Grande Carro';
       btnCalibrate.textContent = 'Calibra';
     }
   }
@@ -758,65 +791,92 @@
     calibratePrompt.classList.remove('is-following');
   }
 
-  function updateFramingLabel(headAz) {
-    const name = framingConstellationName(headAz, sky.date, sky.observer);
+  function updateFramingLabel(headAz, lookAlt) {
+    const name = framingConstellationName(headAz, lookAlt, sky.date, sky.observer);
     const feetAz = normalizeAz(headAz + 180);
-    if (name) {
-      calibrateText.textContent = 'Inquadri: ' + name;
-      orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
-    } else {
-      calibrateText.textContent = 'Muovi il telefono per esplorare';
-      orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
-    }
+    calibrateText.textContent = name ? ('Inquadri: ' + name) : 'Muovi il telefono';
+    orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
   }
 
-  function applyCompassHeading(raw) {
-    if (raw == null || Number.isNaN(raw)) return;
-    compassRawHeading = raw;
-
-    // Prima della calibrazione: non ruotare il cielo
+  function applyDevicePose() {
+    // Prima della calibrazione: solo memorizza raw heading/tilt
     if (compassMode !== 'following') return;
+    if (compassRawHeading == null) return;
 
-    const corrected = normalizeAz(raw + compassOffset);
-    if (compassSmooth == null) {
-      compassSmooth = corrected;
+    const targetAz = normalizeAz(compassRawHeading + compassOffset);
+    const rawAlt = compassRawLookAlt == null ? 45 : compassRawLookAlt;
+    const targetAlt = Math.max(0, Math.min(90, rawAlt + compassAltOffset));
+
+    if (compassSmoothAz == null) {
+      compassSmoothAz = targetAz;
+      compassSmoothAlt = targetAlt;
     } else {
-      const diff = ((corrected - compassSmooth + 540) % 360) - 180;
-      compassSmooth = normalizeAz(compassSmooth + diff * COMPASS_SMOOTH);
+      const diffAz = ((targetAz - compassSmoothAz + 540) % 360) - 180;
+      compassSmoothAz = normalizeAz(compassSmoothAz + diffAz * COMPASS_SMOOTH);
+      compassSmoothAlt += (targetAlt - compassSmoothAlt) * COMPASS_SMOOTH;
     }
-    if (compassLastApplied != null) {
-      if (azDelta(compassSmooth, compassLastApplied) < COMPASS_DEADBAND) return;
+
+    const movedAz = compassLastAz == null || azDelta(compassSmoothAz, compassLastAz) >= COMPASS_DEADBAND_AZ;
+    const movedAlt = compassLastAlt == null || Math.abs(compassSmoothAlt - compassLastAlt) >= COMPASS_DEADBAND_ALT;
+    if (!movedAz && !movedAlt) return;
+
+    compassLastAz = compassSmoothAz;
+    compassLastAlt = compassSmoothAlt;
+    sky.setLookDirection(compassSmoothAz, compassSmoothAlt);
+    updateFramingLabel(compassSmoothAz, compassSmoothAlt);
+  }
+
+  function ingestOrientation(e, { fromAbsolute }) {
+    const alt = lookAltFromEvent(e);
+    if (alt != null) compassRawLookAlt = alt;
+
+    if (fromAbsolute) {
+      // Se già calibrati su relative, ignora heading absolute tardivo (evita salti)
+      if (compassMode === 'following' && !compassGotAbsolute) {
+        applyDevicePose();
+        return;
+      }
+      const h = headingFromEvent(e);
+      if (h == null) {
+        applyDevicePose();
+        return;
+      }
+      compassGotAbsolute = true;
+      compassRawHeading = h;
+      applyDevicePose();
+      return;
     }
-    compassLastApplied = compassSmooth;
-    sky.setOrientation(compassSmooth);
-    updateFramingLabel(compassSmooth);
+
+    // Relative: aggiorna sempre il tilt; heading solo finché absolute non arriva
+    if (!compassGotAbsolute) {
+      if (e && typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
+        compassRawHeading = e.webkitCompassHeading;
+      } else {
+        const h = headingFromEvent(e);
+        if (h != null) compassRawHeading = h;
+      }
+    }
+    applyDevicePose();
   }
 
   function onAbsoluteOrientation(e) {
-    const h = headingFromEvent(e);
-    if (h == null) return;
-    // Se già calibrati su relative, ignora un absolute tardivo (evita salti)
-    if (compassMode === 'following' && !compassGotAbsolute) return;
-    compassGotAbsolute = true;
-    applyCompassHeading(h);
+    ingestOrientation(e, { fromAbsolute: true });
   }
 
   function onRelativeOrientation(e) {
-    // Prefer absolute / webkit heading; relative solo finché absolute non arriva
-    if (compassGotAbsolute) return;
-    if (e && typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
-      applyCompassHeading(e.webkitCompassHeading);
-      return;
-    }
-    applyCompassHeading(headingFromEvent(e));
+    ingestOrientation(e, { fromAbsolute: false });
   }
 
   function stopCompass() {
     compassMode = 'off';
     compassRawHeading = null;
-    compassSmooth = null;
-    compassLastApplied = null;
+    compassRawLookAlt = null;
+    compassSmoothAz = null;
+    compassSmoothAlt = null;
+    compassLastAz = null;
+    compassLastAlt = null;
     compassOffset = 0;
+    compassAltOffset = 0;
     compassGotAbsolute = false;
     if (compassAbsoluteHandler) {
       window.removeEventListener('deviceorientationabsolute', compassAbsoluteHandler);
@@ -835,6 +895,7 @@
       compassHeldHighlight = false;
     }
     sky.setOrientation(FIXED_HEAD_AZ);
+    sky.clearLookFollow();
     orientationNote.style.display = '';
     orientationNote.textContent = '↓ mare (ovest)';
   }
@@ -842,9 +903,13 @@
   function startCompassWaiting() {
     compassMode = 'waiting';
     compassRawHeading = null;
-    compassSmooth = null;
-    compassLastApplied = null;
+    compassRawLookAlt = null;
+    compassSmoothAz = null;
+    compassSmoothAlt = null;
+    compassLastAz = null;
+    compassLastAlt = null;
     compassOffset = 0;
+    compassAltOffset = 0;
     compassGotAbsolute = false;
     compassAbsoluteHandler = onAbsoluteOrientation;
     compassRelativeHandler = onRelativeOrientation;
@@ -854,6 +919,7 @@
     btnCompass.setAttribute('aria-label', 'Disattiva puntamento');
     btnCompass.title = 'Disattiva puntamento';
     // Cielo fermo; evidenzia il Grande Carro come riferimento
+    sky.clearLookFollow();
     sky.setOrientation(FIXED_HEAD_AZ);
     clearAllHighlightClasses();
     sky.setHighlighted({ type: 'constellation', id: 'UMa' });
@@ -865,19 +931,23 @@
   function calibrateNow() {
     if (compassMode === 'off') return;
     if (compassRawHeading == null) {
-      calibrateText.textContent = 'Attendi il sensore, poi riprova';
+      calibrateText.textContent = 'Attendi il sensore…';
       return;
     }
-    let trueAz;
+    let truePos;
     try {
-      trueAz = getGrandeCarroAzimuth(sky.date, sky.observer);
+      truePos = getGrandeCarroPos(sky.date, sky.observer);
     } catch (err) {
-      calibrateText.textContent = 'Calibrazione non riuscita';
+      calibrateText.textContent = 'Calibrazione fallita';
       return;
     }
-    compassOffset = normalizeAz(trueAz - compassRawHeading);
-    compassSmooth = null;
-    compassLastApplied = null;
+    compassOffset = normalizeAz(truePos.az - compassRawHeading);
+    const phoneAlt = compassRawLookAlt == null ? 45 : compassRawLookAlt;
+    compassAltOffset = truePos.alt - phoneAlt;
+    compassSmoothAz = null;
+    compassSmoothAlt = null;
+    compassLastAz = null;
+    compassLastAlt = null;
     compassMode = 'following';
     if (compassHeldHighlight) {
       clearHighlight();
@@ -885,8 +955,7 @@
     }
     orientationNote.style.display = '';
     showCalibratePrompt(true);
-    // Applica subito l’orientamento calibrato
-    applyCompassHeading(compassRawHeading);
+    applyDevicePose();
   }
 
   async function requestCompassPermission() {

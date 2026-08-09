@@ -16,11 +16,6 @@
 
   <div id="orientation-note" aria-hidden="true">↓ mare (ovest)</div>
 
-  <div id="calibrate-prompt" class="calibrate-prompt" hidden aria-hidden="true">
-    <p id="calibrate-text">Punta il telefono verso il Grande Carro, poi premi Calibra</p>
-    <button type="button" id="btn-calibrate" class="btn btn-accent">Calibra</button>
-  </div>
-
   <!-- ── Top info bar ────────────────────────────────────── -->
   <header id="info-bar" aria-label="Informazioni astronomiche">
     <div id="info-chips">
@@ -41,6 +36,10 @@
 
   <!-- ── Bottom dock ─────────────────────────────────────── -->
   <div id="dock">
+    <div id="calibrate-prompt" class="calibrate-prompt" hidden aria-hidden="true">
+      <span id="calibrate-text">Punta il Grande Carro</span>
+      <button type="button" id="btn-calibrate" class="btn btn-accent btn-calibrate">Calibra</button>
+    </div>
     <div id="time-row">
       <span id="hour-label" aria-live="polite">22:30</span>
       <input type="range" id="time-slider" min="0" max="168" value="0" step="1"
