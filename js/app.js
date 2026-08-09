@@ -656,13 +656,12 @@
   });
 
   /* ──────────────────────────────────────────────────────────
-     Compass — follow heading + pitch (bolla), no calibration
+     Compass — heading allinea la mappa; tilt = solo bolla/prompt
   ────────────────────────────────────────────────────────── */
   const FIXED_HEAD_AZ = 90; // top of screen = east (feet toward mare / west)
   const CARDINAL_IT = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
   const COMPASS_SMOOTH = 0.12;
   const COMPASS_DEADBAND_AZ = 1.2;
-  const COMPASS_DEADBAND_ALT = 0.8;
   const FRAMING_MAX_ANG = 32;
 
   /** off | following */
@@ -670,9 +669,7 @@
   let compassRawHeading = null;
   let compassRawLookAlt = null;
   let compassSmoothAz = null;
-  let compassSmoothAlt = null;
   let compassLastAz = null;
-  let compassLastAlt = null;
   let compassGotAbsolute = false;
   let compassAbsoluteHandler = null;
   let compassRelativeHandler = null;
@@ -711,11 +708,11 @@
   }
 
   /**
-   * Altitudine di sguardo da inclinazione telefono (stile AR):
-   *   telefono piatto / punta in alto (tilt ~0) → zenit (90°)
+   * Inclinazione telefono → altitudine stimata (solo bolla / prompt, non la camera):
+   *   telefono piatto (tilt ~0) → zenit (90°)
    *   telefono dritto (tilt ~90) → orizzonte (0°)
-   *   oltre la verticale verso il suolo → sotto orizzonte (-1)
-   * Ritorna null se il sensore manca; -1 se sotto l’orizzonte.
+   *   oltre quelle soglie → -1 (stile bolla “verso il suolo”, mappa resta attiva)
+   * Ritorna null se il sensore manca.
    */
   function lookAltFromEvent(e) {
     if (e == null || typeof e.beta !== 'number' || Number.isNaN(e.beta)) return null;
@@ -729,7 +726,7 @@
       tilt = e.beta;
     }
 
-    // Inclinato in avanti / verso il suolo
+    // Solo feedback bolla: non blocca la mappa
     if (tilt < -5 || tilt > 95) return -1;
 
     const clamped = Math.max(0, Math.min(90, tilt));
@@ -784,63 +781,41 @@
       orientationNote.textContent = '↓ ' + cardinalIt(feetAz);
     }
     updatePitchBolla(lookAlt);
-    if (lookAlt < 0) {
-      calibrateText.textContent = 'Sotto l\'orizzonte';
-      return;
-    }
     if (headAz == null) {
       calibrateText.textContent = 'Muovi il telefono';
       return;
     }
-    const name = framingConstellationName(headAz, lookAlt, sky.date, sky.observer);
-    calibrateText.textContent = name ? ('Inquadri: ' + name) : 'Muovi il telefono';
+    // Tilt sotto-orizzonte: stima all’orizzonte, senza bloccare la vista
+    const altForFrame = lookAlt == null || lookAlt < 0 ? 0 : lookAlt;
+    const name = framingConstellationName(headAz, altForFrame, sky.date, sky.observer);
+    calibrateText.textContent = name ? ('Verso: ' + name) : 'Muovi il telefono';
   }
 
   function applyDevicePose() {
     if (compassMode !== 'following') return;
 
-    // Pitch disponibile prima della bussola: aggiorna solo la bolla
+    // Solo tilt: aggiorna bolla/prompt, non tocca zoom/pan
     if (compassRawHeading == null) {
       if (compassRawLookAlt != null) updateFramingLabel(null, compassRawLookAlt);
       return;
     }
 
     const targetAz = normalizeAz(compassRawHeading);
-
-    // Sotto l’orizzonte: niente cielo
-    if (compassRawLookAlt != null && compassRawLookAlt < 0) {
+    if (compassSmoothAz == null) {
       compassSmoothAz = targetAz;
-      compassSmoothAlt = -1;
-      compassLastAz = targetAz;
-      compassLastAlt = -1;
-      sky.setLookDirection(targetAz, -1);
-      updateFramingLabel(targetAz, -1);
-      return;
-    }
-
-    const targetAlt = compassRawLookAlt == null ? 70 : Math.max(0, Math.min(90, compassRawLookAlt));
-
-    if (compassSmoothAz == null || compassSmoothAlt == null || compassSmoothAlt < 0) {
-      compassSmoothAz = targetAz;
-      compassSmoothAlt = targetAlt;
     } else {
       const diffAz = ((targetAz - compassSmoothAz + 540) % 360) - 180;
       compassSmoothAz = normalizeAz(compassSmoothAz + diffAz * COMPASS_SMOOTH);
-      compassSmoothAlt += (targetAlt - compassSmoothAlt) * COMPASS_SMOOTH;
     }
 
     const movedAz = compassLastAz == null || azDelta(compassSmoothAz, compassLastAz) >= COMPASS_DEADBAND_AZ;
-    const movedAlt = compassLastAlt == null || compassLastAlt < 0 ||
-      Math.abs(compassSmoothAlt - compassLastAlt) >= COMPASS_DEADBAND_ALT;
-    if (!movedAz && !movedAlt) {
-      updatePitchBolla(compassSmoothAlt);
-      return;
+    if (movedAz) {
+      compassLastAz = compassSmoothAz;
+      sky.setOrientation(compassSmoothAz);
     }
 
-    compassLastAz = compassSmoothAz;
-    compassLastAlt = compassSmoothAlt;
-    sky.setLookDirection(compassSmoothAz, compassSmoothAlt);
-    updateFramingLabel(compassSmoothAz, compassSmoothAlt);
+    const lookAlt = compassRawLookAlt == null ? 70 : compassRawLookAlt;
+    updateFramingLabel(compassSmoothAz, lookAlt);
   }
 
   function ingestOrientation(e, { fromAbsolute }) {
@@ -882,9 +857,7 @@
     compassRawHeading = null;
     compassRawLookAlt = null;
     compassSmoothAz = null;
-    compassSmoothAlt = null;
     compassLastAz = null;
-    compassLastAlt = null;
     compassGotAbsolute = false;
     if (compassAbsoluteHandler) {
       window.removeEventListener('deviceorientationabsolute', compassAbsoluteHandler);
@@ -899,7 +872,6 @@
     btnCompass.title = 'Punta il cielo';
     hidePointPrompt();
     sky.setOrientation(FIXED_HEAD_AZ);
-    sky.clearLookFollow();
     orientationNote.style.display = '';
     orientationNote.textContent = '↓ mare (ovest)';
   }
@@ -909,9 +881,7 @@
     compassRawHeading = null;
     compassRawLookAlt = null;
     compassSmoothAz = null;
-    compassSmoothAlt = null;
     compassLastAz = null;
-    compassLastAlt = null;
     compassGotAbsolute = false;
     compassAbsoluteHandler = onAbsoluteOrientation;
     compassRelativeHandler = onRelativeOrientation;
@@ -922,7 +892,7 @@
     btnCompass.title = 'Disattiva puntamento';
     orientationNote.style.display = '';
     showPointPrompt();
-    calibrateText.textContent = 'Muovi il telefono';
+    calibrateText.textContent = 'Pizzica per zoomare · gira il telefono';
     updatePitchBolla(70);
   }
 

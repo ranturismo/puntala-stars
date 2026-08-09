@@ -1,11 +1,11 @@
 // Sky rendering engine — astronomy calculations and canvas drawing
 
-/** Costellazioni mostrate nella vista panoramica (zoom basso / bussola). */
+/** Costellazioni mostrate nella vista panoramica (zoom basso). */
 const OVERVIEW_CONSTS = new Set([
   'UMa', 'UMi', 'Cyg', 'Aql', 'Lyr', 'Cas', 'Sco', 'Sgr',
   'Peg', 'Del', 'Her', 'Boo', 'CrB',
 ]);
-/** Solo con pinch manuale oltre questa soglia si sbloccano tutte. */
+/** Con pinch oltre questa soglia si sbloccano tutte. */
 const OVERVIEW_ZOOM_FULL = 3.5;
 const MAX_ZOOM = 12;
 
@@ -37,9 +37,6 @@ window.SkyRenderer = class SkyRenderer {
     this.showConstellationArt = false;
     this.showAzimuthRays = false;
     this.showStarNames = true;
-    this.lookFollow = false;
-    this.lookAlt = 90;
-    this.belowHorizon = false;
 
     this.setupResize();
     this.computeStaticStars();
@@ -50,10 +47,6 @@ window.SkyRenderer = class SkyRenderer {
   isConstVisibleInOverview(id) {
     const hl = this.highlighted;
     const isHL = !!(hl && hl.type === 'constellation' && hl.id === id);
-    // In bussola resta sempre il set snello (lo zoom automatico non deve aprire il casino)
-    if (this.lookFollow) {
-      return OVERVIEW_CONSTS.has(id) || isHL;
-    }
     if (this.zoom >= OVERVIEW_ZOOM_FULL) return true;
     if (OVERVIEW_CONSTS.has(id)) return true;
     return isHL;
@@ -145,58 +138,10 @@ window.SkyRenderer = class SkyRenderer {
     this.render();
   }
 
-  /** headAz = azimuth at the top of the screen (degrees, 0 = N). */
+  /** headAz = azimuth at the top of the screen (degrees, 0 = N). Does not touch zoom/pan. */
   setOrientation(headAz) {
     this.headAz = ((headAz % 360) + 360) % 360;
     this.feetAz = (this.headAz + 180) % 360;
-    this.render();
-  }
-
-  /**
-   * Orient the map to the phone look direction.
-   * headAz = azimuth; lookAlt = altitude (0 = horizon, 90 = zenith).
-   * Pass lookAlt < 0 when the phone points below the horizon.
-   */
-  setLookDirection(headAz, lookAlt) {
-    this.headAz = ((headAz % 360) + 360) % 360;
-    this.feetAz = (this.headAz + 180) % 360;
-    this.lookFollow = true;
-
-    if (lookAlt < 0) {
-      this.belowHorizon = true;
-      this.lookAlt = -1;
-      this.zoom = 1;
-      this.panX = 0;
-      this.panY = 0;
-      this.radius = this.baseRadius;
-      this.render();
-      return;
-    }
-
-    this.belowHorizon = false;
-    this.lookAlt = Math.max(0, Math.min(90, lookAlt));
-
-    // Zenith → overview; horizon → zoom into the rim and pan that band to center
-    const t = 1 - (this.lookAlt / 90); // 0 zenith … 1 horizon
-    this.zoom = 1 + t * 3.2; // ~1 … 4.2
-    this.radius = this.baseRadius * this.zoom;
-
-    // With headAz aligned, look point sits on the +Y axis of the disc at radius r
-    const r = ((90 - this.lookAlt) / 90) * this.radius;
-    this.panX = 0;
-    this.panY = r;
-    this.clampPan();
-    this.render();
-  }
-
-  clearLookFollow() {
-    this.lookFollow = false;
-    this.belowHorizon = false;
-    this.lookAlt = 90;
-    this.zoom = 1;
-    this.panX = 0;
-    this.panY = 0;
-    this.radius = this.baseRadius;
     this.render();
   }
 
@@ -301,17 +246,6 @@ window.SkyRenderer = class SkyRenderer {
     ctx.clearRect(0, 0, w, h);
 
     this.drawBackground(ctx, w, h);
-
-    if (this.belowHorizon) {
-      this.drawHorizon(ctx, cx, cy, R, headAz);
-      ctx.fillStyle = 'rgba(180,200,240,0.45)';
-      ctx.font = '14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Sotto l\'orizzonte', this.centerX, this.centerY);
-      ctx.restore();
-      return;
-    }
 
     // Compute positions
     const sunEqu = Astronomy.Equator(Astronomy.Body.Sun, d, obs, true, true);
@@ -1203,15 +1137,12 @@ window.SkyRenderer = class SkyRenderer {
   }
 
   clampPan() {
-    const maxPan = this.lookFollow ? this.radius * 1.05 : this.radius * 0.7;
+    const maxPan = this.radius * 0.7;
     this.panX = Math.max(-maxPan, Math.min(maxPan, this.panX));
     this.panY = Math.max(-maxPan, Math.min(maxPan, this.panY));
   }
 
   resetView() {
-    this.lookFollow = false;
-    this.belowHorizon = false;
-    this.lookAlt = 90;
     this.zoom = 1;
     this.panX = 0;
     this.panY = 0;
