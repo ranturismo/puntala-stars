@@ -61,8 +61,11 @@
     </div>
     <div id="time-row">
       <span id="hour-label" aria-live="polite">22:30</span>
-      <input type="range" id="time-slider" min="0" max="168" value="0" step="1"
-             aria-label="Ora della notte">
+      <div id="time-track-wrap">
+        <div id="eclipse-markers" aria-hidden="true"></div>
+        <input type="range" id="time-slider" min="0" max="839" value="0" step="1"
+               aria-label="Ora della notte">
+      </div>
       <span id="end-label" aria-hidden="true">07:00</span>
     </div>
 
@@ -70,9 +73,10 @@
       <div class="action-group">
         <button id="btn-play" class="btn btn-icon" aria-label="Riproduci animazione">▶</button>
         <button id="btn-now" class="btn btn-ghost">Adesso</button>
+        <button id="btn-eclipse" class="btn btn-ghost" title="Eclissi solare 12 agosto 2026">Eclissi</button>
         <button id="btn-compass" class="btn btn-icon" aria-label="Punta il cielo"
                 aria-pressed="false" title="Punta il cielo">◎</button>
-        <span id="speed-label" aria-hidden="true" style="display:none">33 min/s</span>
+        <span id="speed-label" aria-hidden="true" style="display:none">10 min/s</span>
       </div>
       <div class="action-group">
         <button id="btn-explore" class="btn btn-accent" aria-label="Esplora costellazioni e stelle">

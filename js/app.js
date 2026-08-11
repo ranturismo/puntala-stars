@@ -35,7 +35,9 @@
   const MIN_TIME    = 18 * 60;           // 18:00 evening
   const MAX_TIME    = 31 * 60 + 59;      // ~07:59 next morning
   const DAY_MINUTES = 24 * 60;
-  const ANIM_SPEED  = 150;  // ms per step (5 simulated minutes)
+  const TIME_STEP   = 1;                 // 1 simulated minute per slider tick
+  const ANIM_SPEED  = 100;               // ms per play step (~10 min/s)
+  const ECLIPSE_DAY = new Date(2026, 7, 12); // 12 agosto 2026
 
   const PLANET_SYMBOLS = {
     'Mercurio': '☿', 'Venere': '♀', 'Marte': '♂', 'Giove': '♃', 'Saturno': '♄',
@@ -49,8 +51,10 @@
   const timeSlider   = document.getElementById('time-slider');
   const hourLabel    = document.getElementById('hour-label');
   const endLabel     = document.getElementById('end-label');
+  const eclipseMarkers = document.getElementById('eclipse-markers');
   const btnPlay      = document.getElementById('btn-play');
   const btnNow       = document.getElementById('btn-now');
+  const btnEclipse   = document.getElementById('btn-eclipse');
   const speedLabel   = document.getElementById('speed-label');
   const btnExplore   = document.getElementById('btn-explore');
   const btnSettings  = document.getElementById('btn-settings');
@@ -62,6 +66,7 @@
   const pitchBollaDot   = document.getElementById('pitch-bolla-dot');
 
   // Info bar
+  const infoSunChip     = document.getElementById('info-sun-chip');
   const infoSunText     = document.getElementById('info-sun-text');
   const infoMoonIcon    = document.getElementById('info-moon-icon');
   const infoMoonText    = document.getElementById('info-moon-text');
@@ -481,15 +486,21 @@
      Time slider + current night
   ────────────────────────────────────────────────────────── */
   function initSlider() {
-    const totalSteps = (MAX_TIME - MIN_TIME) / 5;
+    const totalSteps = Math.floor((MAX_TIME - MIN_TIME) / TIME_STEP);
     timeSlider.max = totalSteps;
-    timeSlider.value = Math.round((selectedMinutes - MIN_TIME) / 5);
+    syncSliderFromMinutes();
     timeSlider.addEventListener('input', () => {
-      selectedMinutes = MIN_TIME + parseInt(timeSlider.value, 10) * 5;
+      selectedMinutes = MIN_TIME + parseInt(timeSlider.value, 10) * TIME_STEP;
       updateLabels();
       updateTime();
     });
     updateLabels();
+  }
+
+  function syncSliderFromMinutes() {
+    const clamped = Math.max(MIN_TIME, Math.min(MAX_TIME, selectedMinutes));
+    selectedMinutes = clamped;
+    timeSlider.value = Math.round((selectedMinutes - MIN_TIME) / TIME_STEP);
   }
 
   function updateLabels() {
@@ -508,9 +519,84 @@
     return d;
   }
 
+  /** Minuti da mezzanotte dell'anchor (stesso schema di selectedMinutes). */
+  function dateToNightMinutes(anchor, date) {
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), 0, 0, 0, 0);
+    let mins = Math.round((date.getTime() - start.getTime()) / 60000);
+    if (mins < 0) mins += DAY_MINUTES;
+    return mins;
+  }
+
   function updateTime() {
     sky.setTime(makeDate(nightAnchor, selectedMinutes));
+    updateEclipseMarkers();
     updateInfo();
+  }
+
+  function stopPlay() {
+    if (!isPlaying) return;
+    isPlaying = false;
+    btnPlay.textContent = '▶';
+    btnPlay.setAttribute('aria-label', 'Riproduci animazione');
+    speedLabel.style.display = 'none';
+    clearTimeout(playTimer);
+    playTimer = null;
+  }
+
+  function isEclipseNight() {
+    return (
+      nightAnchor.getFullYear() === ECLIPSE_DAY.getFullYear() &&
+      nightAnchor.getMonth() === ECLIPSE_DAY.getMonth() &&
+      nightAnchor.getDate() === ECLIPSE_DAY.getDate()
+    );
+  }
+
+  function updateEclipseMarkers() {
+    if (!eclipseMarkers) return;
+    eclipseMarkers.innerHTML = '';
+    if (!isEclipseNight()) {
+      btnEclipse.setAttribute('aria-pressed', 'false');
+      return;
+    }
+    btnEclipse.setAttribute('aria-pressed', 'true');
+    const ecl = sky.getLocalSolarEclipse(nightAnchor);
+    if (!ecl) return;
+
+    const span = MAX_TIME - MIN_TIME;
+    const addMark = (date, cls, title) => {
+      const mins = dateToNightMinutes(nightAnchor, date);
+      if (mins < MIN_TIME || mins > MAX_TIME) return;
+      const pct = ((mins - MIN_TIME) / span) * 100;
+      const el = document.createElement('span');
+      el.className = 'ecl-mark' + (cls ? ' ' + cls : '');
+      el.style.left = pct + '%';
+      el.title = title;
+      eclipseMarkers.appendChild(el);
+    };
+
+    addMark(ecl.partialBegin.time, '', `Inizio ${fmt(ecl.partialBegin.time)}`);
+    addMark(ecl.peak.time, 'ecl-mark--peak', `Massimo ${fmt(ecl.peak.time)}`);
+    addMark(
+      ecl.partialEnd.time,
+      ecl.partialEnd.altitude < 0 ? 'ecl-mark--ended' : '',
+      ecl.partialEnd.altitude < 0
+        ? `Fine astronomica ${fmt(ecl.partialEnd.time)} (dopo il tramonto)`
+        : `Fine ${fmt(ecl.partialEnd.time)}`
+    );
+  }
+
+  function jumpToEclipse() {
+    stopPlay();
+    nightAnchor = startOfLocalDay(ECLIPSE_DAY);
+    const ecl = sky.getLocalSolarEclipse(nightAnchor);
+    if (ecl) {
+      selectedMinutes = dateToNightMinutes(nightAnchor, ecl.partialBegin.time);
+    } else {
+      selectedMinutes = 19 * 60 + 30;
+    }
+    syncSliderFromMinutes();
+    updateLabels();
+    updateTime();
   }
 
   /** Snap UI to the real clock, clamping to the night window. */
@@ -533,7 +619,7 @@
       selectedMinutes = MIN_TIME;
     }
 
-    timeSlider.value = Math.round((selectedMinutes - MIN_TIME) / 5);
+    syncSliderFromMinutes();
     updateLabels();
     updateTime();
   }
@@ -566,11 +652,31 @@
     const info = sky.getInfo();
     const waxing = info.moonWaxing !== false;
 
-    // Sun chip
-    const sunParts = [];
-    if (info.sunset)  sunParts.push(`↓ ${fmt(info.sunset)}`);
-    if (info.sunRise) sunParts.push(`↑ ${fmt(info.sunRise)}`);
-    infoSunText.textContent = sunParts.length ? sunParts.join(' · ') : '—';
+    const eclStatus = isEclipseNight()
+      ? sky.getEclipseStatus(makeDate(nightAnchor, selectedMinutes))
+      : null;
+
+    // Sun chip — on eclipse night prefer contact times
+    if (eclStatus) {
+      const endNote = eclStatus.partialEnd.altitude < 0
+        ? '· fine dopo ↓'
+        : `· fine ${fmt(eclStatus.partialEnd.time)}`;
+      infoSunText.textContent =
+        `ecl ${fmt(eclStatus.partialBegin.time)} · max ${fmt(eclStatus.peak.time)} ${endNote}`;
+      infoSunChip.title =
+        `Eclissi: inizio ${fmt(eclStatus.partialBegin.time)}, ` +
+        `massimo ${fmt(eclStatus.peak.time)} (${Math.round(eclStatus.obscuration * 100)}%), ` +
+        (eclStatus.partialEnd.altitude < 0
+          ? `fine astronomica ${fmt(eclStatus.partialEnd.time)} (Sole già tramontato)`
+          : `fine ${fmt(eclStatus.partialEnd.time)}`) +
+        (info.sunset ? ` · tramonto ${fmt(info.sunset)}` : '');
+    } else {
+      const sunParts = [];
+      if (info.sunset)  sunParts.push(`↓ ${fmt(info.sunset)}`);
+      if (info.sunRise) sunParts.push(`↑ ${fmt(info.sunRise)}`);
+      infoSunText.textContent = sunParts.length ? sunParts.join(' · ') : '—';
+      infoSunChip.title = 'Tramonto e alba';
+    }
 
     // Moon chip
     const fi = info.moonIllum;
@@ -591,15 +697,46 @@
       infoPlanetsChip.style.display = 'none';
     }
 
-    // Event banner — based on the evening's real calendar date
+    // Event / eclipse status banner
     const month = nightAnchor.getMonth();
     const day = nightAnchor.getDate();
     let eventText = '';
-    if (month === 7) {
+
+    if (eclStatus) {
+      const peakPct = Math.round(eclStatus.obscuration * 100);
+      const nowPct = Math.round(eclStatus.obscurationNow * 100);
+      const begin = fmt(eclStatus.partialBegin.time);
+      const peak = fmt(eclStatus.peak.time);
+      const end = fmt(eclStatus.partialEnd.time);
+      const endAfterSunset = eclStatus.partialEnd.altitude < 0;
+      const sunDown = eclStatus.sunAltitude < 0;
+
+      if (eclStatus.phase === 'before') {
+        eventText = `☀ Eclissi parziale · inizio ${begin} · max ${peak} (${peakPct}%)`;
+      } else if (eclStatus.phase === 'peak') {
+        eventText = sunDown
+          ? `☀ Massimo eclissi · ${peakPct}% · Sole all'orizzonte / appena tramontato`
+          : `☀ Massimo eclissi · ~${nowPct}% oscurato`;
+      } else if (eclStatus.phase === 'during') {
+        if (sunDown) {
+          eventText = endAfterSunset
+            ? `☀ Eclissi in corso sotto l'orizzonte · fine astr. ${end}`
+            : `☀ Eclissi in corso · Sole tramontato`;
+        } else {
+          eventText = `☀ Eclissi in corso · ~${nowPct}% · max ${peak} (${peakPct}%)`;
+        }
+      } else if (eclStatus.phase === 'after') {
+        eventText = endAfterSunset
+          ? `☀ Eclissi conclusa (fine astr. ${end}, dopo il tramonto) · ☄ Perseidi`
+          : `☀ Eclissi conclusa alle ${end} · ☄ Perseidi`;
+      } else {
+        eventText = `☀ Eclissi parziale 12 ago · ${begin} → ${peak} → ${end}`;
+      }
+    } else if (month === 7) {
       if (day === 6) eventText = 'Ultimo quarto: la luna sorge dopo mezzanotte — serata buona';
       else if (day === 7 || day === 8) eventText = 'La luna sorge tardi — prime ore buie ottime per la Via Lattea';
       else if (day === 11 || day === 14) eventText = '☄ Perseidi attive — cerca stelle cadenti dopo mezzanotte';
-      else if (day === 12) eventText = '🌑 Luna nuova · ☄ Picco Perseidi — notte perfetta!';
+      else if (day === 12) eventText = '☀ Eclissi parziale al tramonto · ☄ Picco Perseidi';
       else if (day === 13) eventText = '☄ Picco Perseidi! Guarda verso nord-est dopo mezzanotte';
       else if (day >= 15 && day <= 18) eventText = 'Falce crescente visibile dopo il tramonto · Via Lattea a tarda notte';
     }
@@ -630,29 +767,26 @@
 
   function playStep() {
     if (!isPlaying) return;
-    selectedMinutes += 5;
+    selectedMinutes += TIME_STEP;
     if (selectedMinutes > MAX_TIME) {
       selectedMinutes = MIN_TIME;
     }
-    timeSlider.value = Math.round((selectedMinutes - MIN_TIME) / 5);
+    syncSliderFromMinutes();
     updateLabels();
     updateTime();
     playTimer = setTimeout(playStep, ANIM_SPEED);
   }
 
   /* ──────────────────────────────────────────────────────────
-     "Adesso" button
+     "Adesso" / "Eclissi" buttons
   ────────────────────────────────────────────────────────── */
   btnNow.addEventListener('click', () => {
+    stopPlay();
     applyNow();
-    if (isPlaying) {
-      isPlaying = false;
-      btnPlay.textContent = '▶';
-      btnPlay.setAttribute('aria-label', 'Riproduci animazione');
-      speedLabel.style.display = 'none';
-      clearTimeout(playTimer);
-      playTimer = null;
-    }
+  });
+
+  btnEclipse.addEventListener('click', () => {
+    jumpToEclipse();
   });
 
   /* ──────────────────────────────────────────────────────────

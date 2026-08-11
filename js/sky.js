@@ -8,6 +8,10 @@ const OVERVIEW_CONSTS = new Set([
 /** Con pinch oltre questa soglia si sbloccano tutte. */
 const OVERVIEW_ZOOM_FULL = 3.5;
 const MAX_ZOOM = 12;
+const SUN_RADIUS_KM = 695700;
+const MOON_RADIUS_KM = 1737.4;
+/** Separazione angolare entro cui compositare Sole+Luna come eclissi. */
+const ECLIPSE_SEP_DEG = 1.5;
 
 window.SkyRenderer = class SkyRenderer {
   constructor(canvas) {
@@ -37,10 +41,153 @@ window.SkyRenderer = class SkyRenderer {
     this.showConstellationArt = false;
     this.showAzimuthRays = false;
     this.showStarNames = true;
+    this._eclipseCache = null;
 
     this.setupResize();
     this.computeStaticStars();
     this.setupZoom();
+  }
+
+  /** AstroTime → Date */
+  _astroDate(t) {
+    if (!t) return null;
+    if (t instanceof Date) return new Date(t);
+    if (t.date instanceof Date) return new Date(t.date);
+    return new Date(t);
+  }
+
+  /** Raggio apparente geocentrico in gradi. */
+  apparentRadiusDeg(body, date) {
+    try {
+      const v = Astronomy.GeoVector(body, date, true);
+      const distAu = Math.hypot(v.x, v.y, v.z);
+      const radiusKm = body === Astronomy.Body.Sun ? SUN_RADIUS_KM : MOON_RADIUS_KM;
+      const sinArg = Math.min(1, radiusKm / (distAu * Astronomy.KM_PER_AU));
+      return Math.asin(sinArg) * Astronomy.RAD2DEG;
+    } catch (e) {
+      return body === Astronomy.Body.Sun ? 0.27 : 0.27;
+    }
+  }
+
+  angularSeparationDeg(alt1, az1, alt2, az2) {
+    const toVec = (alt, az) => {
+      const a = alt * Astronomy.DEG2RAD;
+      const z = az * Astronomy.DEG2RAD;
+      return {
+        x: Math.cos(a) * Math.sin(z),
+        y: Math.cos(a) * Math.cos(z),
+        z: Math.sin(a),
+      };
+    };
+    const s = toVec(alt1, az1);
+    const m = toVec(alt2, az2);
+    const dot = Math.min(1, Math.max(-1, s.x * m.x + s.y * m.y + s.z * m.z));
+    return Math.acos(dot) * Astronomy.RAD2DEG;
+  }
+
+  /** Area di intersezione di due dischi / area del Sole (oscuramento). */
+  diskObscuration(sunR, moonR, sep) {
+    if (sep >= sunR + moonR) return 0;
+    if (moonR - sunR >= sep) return 1;
+    if (sunR - moonR >= sep) return (moonR * moonR) / (sunR * sunR);
+    const R = sunR;
+    const r = moonR;
+    const d = sep;
+    const R2 = R * R;
+    const r2 = r * r;
+    const d2 = d * d;
+    const a = Math.acos(Math.min(1, Math.max(-1, (d2 + R2 - r2) / (2 * d * R))));
+    const b = Math.acos(Math.min(1, Math.max(-1, (d2 + r2 - R2) / (2 * d * r))));
+    const overlap = R2 * a + r2 * b - 0.5 * Math.sqrt(Math.max(0, (-d + R + r) * (d + R - r) * (d - R + r) * (d + R + r)));
+    return Math.min(1, Math.max(0, overlap / (Math.PI * R2)));
+  }
+
+  /**
+   * Prima eclissi solare locale dopo mezzogiorno del giorno di `aroundDate`.
+   * Restituisce contatti in Date locali del browser + obscuration al picco.
+   */
+  getLocalSolarEclipse(aroundDate) {
+    const d0 = aroundDate ? new Date(aroundDate) : this.date;
+    const dayKey = `${d0.getFullYear()}-${d0.getMonth()}-${d0.getDate()}`;
+    if (this._eclipseCache && this._eclipseCache.key === dayKey) {
+      return this._eclipseCache.data;
+    }
+
+    const searchFrom = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), 0, 0, 0, 0);
+    searchFrom.setHours(searchFrom.getHours() - 12);
+
+    try {
+      const raw = Astronomy.SearchLocalSolarEclipse(searchFrom, this.observer);
+      const peakTime = this._astroDate(raw.peak.time);
+      // Solo se il picco cade nel giorno civile di aroundDate (fuso locale)
+      if (
+        peakTime.getFullYear() !== d0.getFullYear() ||
+        peakTime.getMonth() !== d0.getMonth() ||
+        peakTime.getDate() !== d0.getDate()
+      ) {
+        this._eclipseCache = { key: dayKey, data: null };
+        return null;
+      }
+
+      const eventOf = (ev) => ({
+        time: this._astroDate(ev.time),
+        altitude: ev.altitude,
+      });
+
+      const data = {
+        kind: raw.kind,
+        obscuration: raw.obscuration,
+        partialBegin: eventOf(raw.partial_begin),
+        peak: eventOf(raw.peak),
+        partialEnd: eventOf(raw.partial_end),
+        totalBegin: raw.total_begin ? eventOf(raw.total_begin) : null,
+        totalEnd: raw.total_end ? eventOf(raw.total_end) : null,
+      };
+      this._eclipseCache = { key: dayKey, data };
+      return data;
+    } catch (e) {
+      this._eclipseCache = { key: dayKey, data: null };
+      return null;
+    }
+  }
+
+  /** Stato eclissi all'istante `date` (oscuramento geometrico live). */
+  getEclipseStatus(date) {
+    const ecl = this.getLocalSolarEclipse(date);
+    if (!ecl) return null;
+
+    const t = date.getTime();
+    const t0 = ecl.partialBegin.time.getTime();
+    const tPeak = ecl.peak.time.getTime();
+    const t1 = ecl.partialEnd.time.getTime();
+
+    let phase = 'none';
+    if (t < t0) phase = 'before';
+    else if (t > t1) phase = 'after';
+    else if (Math.abs(t - tPeak) <= 60 * 1000) phase = 'peak';
+    else phase = 'during';
+
+    const sunEqu = Astronomy.Equator(Astronomy.Body.Sun, date, this.observer, true, true);
+    const sunHor = Astronomy.Horizon(date, this.observer, sunEqu.ra, sunEqu.dec, 'normal');
+    const moonEqu = Astronomy.Equator(Astronomy.Body.Moon, date, this.observer, true, true);
+    const moonHor = Astronomy.Horizon(date, this.observer, moonEqu.ra, moonEqu.dec, 'normal');
+    const sunR = this.apparentRadiusDeg(Astronomy.Body.Sun, date);
+    const moonR = this.apparentRadiusDeg(Astronomy.Body.Moon, date);
+    const sep = this.angularSeparationDeg(
+      sunHor.altitude, sunHor.azimuth,
+      moonHor.altitude, moonHor.azimuth
+    );
+    let obscuration = this.diskObscuration(sunR, moonR, sep);
+    if (phase === 'peak') obscuration = Math.max(obscuration, ecl.obscuration);
+    if (phase === 'before' || phase === 'after') obscuration = 0;
+
+    return {
+      ...ecl,
+      phase,
+      obscurationNow: obscuration,
+      sunAltitude: sunHor.altitude,
+      separationDeg: sep,
+    };
   }
 
   /** True se la costellazione va disegnata a questo livello di zoom. */
@@ -306,14 +453,26 @@ window.SkyRenderer = class SkyRenderer {
       this.drawRadiant(ctx, cx, cy, R, headAz, d, obs);
     }
 
-    // Draw Moon
-    if (moonAlt > -5) {
-      this.drawMoon(ctx, cx, cy, R, moonAlt, moonAz, moonFrac, moonPhaseAngle, sunHor, headAz, d, obs);
-    }
+    // Sole / Luna: durante un'eclissi composita i dischi; altrimenti separati
+    const sunRdeg = this.apparentRadiusDeg(Astronomy.Body.Sun, d);
+    const moonRdeg = this.apparentRadiusDeg(Astronomy.Body.Moon, d);
+    const bodySep = this.angularSeparationDeg(
+      sunAlt, sunHor.azimuth, moonAlt, moonAz
+    );
+    const inEclipseView =
+      sunAlt > -5 && moonAlt > -5 && bodySep < ECLIPSE_SEP_DEG;
 
-    // Draw Sun
-    if (sunAlt > -5) {
-      this.drawSun(ctx, cx, cy, R, sunAlt, sunHor.azimuth);
+    if (inEclipseView) {
+      this.drawEclipsedSun(
+        ctx, cx, cy, R, sunHor, moonHor, sunRdeg, moonRdeg, bodySep
+      );
+    } else {
+      if (moonAlt > -5) {
+        this.drawMoon(ctx, cx, cy, R, moonAlt, moonAz, moonFrac, moonPhaseAngle, sunHor, headAz, d, obs);
+      }
+      if (sunAlt > -5) {
+        this.drawSun(ctx, cx, cy, R, sunAlt, sunHor.azimuth);
+      }
     }
 
     // Draw planets
@@ -348,6 +507,16 @@ window.SkyRenderer = class SkyRenderer {
   altAzToScreen(alt, az) {
     const a = this.azToScreen(az);
     const r = ((90 - Math.max(alt, 0)) / 90) * this.radius;
+    return {
+      x: this.viewX - r * Math.sin(a),
+      y: this.viewY - r * Math.cos(a),
+    };
+  }
+
+  /** Come altAzToScreen ma senza clamp sull'orizzonte (per offset eclissi). */
+  _rawAltAzToScreen(alt, az) {
+    const a = this.azToScreen(az);
+    const r = ((90 - alt) / 90) * this.radius;
     return {
       x: this.viewX - r * Math.sin(a),
       y: this.viewY - r * Math.cos(a),
@@ -984,6 +1153,82 @@ window.SkyRenderer = class SkyRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Sole', pos.x + r + 3, pos.y - 1);
+  }
+
+  /**
+   * Sole parzialmente occultato: scala l'offset Luna→Sole ai raggi apparenti
+   * (la proiezione sky-map comprime troppo le separazioni di frazioni di grado).
+   */
+  drawEclipsedSun(ctx, cx, cy, R, sunHor, moonHor, sunRdeg, moonRdeg, sepDeg) {
+    const sunPos = this.altAzToScreen(sunHor.altitude, sunHor.azimuth);
+    const sunPx = Math.max(14, Math.min(28, R * 0.045));
+    const pxPerDeg = sunPx / Math.max(sunRdeg, 0.01);
+    const moonPx = moonRdeg * pxPerDeg;
+    const obsc = this.diskObscuration(sunRdeg, moonRdeg, sepDeg);
+
+    const rawSun = this._rawAltAzToScreen(sunHor.altitude, sunHor.azimuth);
+    const rawMoon = this._rawAltAzToScreen(moonHor.altitude, moonHor.azimuth);
+    let dx = rawMoon.x - rawSun.x;
+    let dy = rawMoon.y - rawSun.y;
+    const screenSep = Math.hypot(dx, dy);
+    if (screenSep > 1e-6 && sepDeg > 1e-6) {
+      const scale = (sepDeg * pxPerDeg) / screenSep;
+      dx *= scale;
+      dy *= scale;
+    } else {
+      dx = 0;
+      dy = 0;
+    }
+    const moonX = sunPos.x + dx;
+    const moonY = sunPos.y + dy;
+
+    const glowAlpha = 0.35 * (1 - obsc * 0.92);
+    const glowR = 25 + sunPx;
+    const glow = ctx.createRadialGradient(sunPos.x, sunPos.y, sunPx * 0.5, sunPos.x, sunPos.y, glowR);
+    glow.addColorStop(0, `rgba(255,210,80,${glowAlpha.toFixed(3)})`);
+    glow.addColorStop(0.45, `rgba(255,180,40,${(glowAlpha * 0.35).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(255,140,20,0)');
+    ctx.beginPath();
+    ctx.arc(sunPos.x, sunPos.y, glowR, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+
+    // Disco solare (clippato dalla luna)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sunPos.x, sunPos.y, sunPx, 0, Math.PI * 2);
+    ctx.clip();
+
+    const halo = ctx.createRadialGradient(sunPos.x, sunPos.y, sunPx * 0.25, sunPos.x, sunPos.y, sunPx);
+    halo.addColorStop(0, 'rgba(255,245,200,1)');
+    halo.addColorStop(0.65, 'rgba(255,200,80,0.95)');
+    halo.addColorStop(1, 'rgba(255,150,30,0.85)');
+    ctx.beginPath();
+    ctx.arc(sunPos.x, sunPos.y, sunPx, 0, Math.PI * 2);
+    ctx.fillStyle = halo;
+    ctx.fill();
+
+    // Luna come disco scuro sopra il Sole
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, moonPx + 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#050810';
+    ctx.fill();
+    ctx.restore();
+
+    // Contorno tenue del disco solare
+    ctx.beginPath();
+    ctx.arc(sunPos.x, sunPos.y, sunPx, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,230,160,${(0.35 + 0.4 * (1 - obsc)).toFixed(2)})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const pct = Math.round(obsc * 100);
+    ctx.fillStyle = 'rgba(255,240,180,0.9)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    const label = pct > 0 ? `Sole · ${pct}%` : 'Sole';
+    ctx.fillText(label, sunPos.x + sunPx + 3, sunPos.y - 1);
   }
 
   drawRadiant(ctx, cx, cy, R, headAz, date, obs) {
