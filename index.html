@@ -133,25 +133,28 @@
         <section class="settings-section">
           <h3 class="settings-section-title">Luogo</h3>
           <p class="settings-desc">
-            Coordinate del punto di osservazione (predefinito: Punta Ala).
+            Scegli una città vicina: nella stessa regione il cielo cambia poco.
+            Predefinito: Punta Ala.
           </p>
-          <div class="location-fields">
-            <label class="location-field" for="loc-lat">
-              <span class="location-field-label">Latitudine</span>
-              <input type="number" id="loc-lat" min="-90" max="90" step="any"
-                     inputmode="decimal" autocomplete="off"
-                     aria-label="Latitudine in gradi">
-            </label>
-            <label class="location-field" for="loc-lon">
-              <span class="location-field-label">Longitudine</span>
-              <input type="number" id="loc-lon" min="-180" max="180" step="any"
-                     inputmode="decimal" autocomplete="off"
-                     aria-label="Longitudine in gradi">
-            </label>
-          </div>
-          <button type="button" class="btn-text" id="btn-loc-reset">
-            Ripristina Punta Ala
-          </button>
+          <div id="place-presets" class="place-presets" role="group"
+               aria-label="Città di esempio"></div>
+          <details class="location-advanced">
+            <summary>Coordinate personalizzate</summary>
+            <div class="location-fields">
+              <label class="location-field" for="loc-lat">
+                <span class="location-field-label">Latitudine</span>
+                <input type="number" id="loc-lat" min="-90" max="90" step="any"
+                       inputmode="decimal" autocomplete="off"
+                       aria-label="Latitudine in gradi">
+              </label>
+              <label class="location-field" for="loc-lon">
+                <span class="location-field-label">Longitudine</span>
+                <input type="number" id="loc-lon" min="-180" max="180" step="any"
+                       inputmode="decimal" autocomplete="off"
+                       aria-label="Longitudine in gradi">
+              </label>
+            </div>
+          </details>
         </section>
 
         <section class="settings-section">

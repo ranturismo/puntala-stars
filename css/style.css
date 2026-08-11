@@ -903,12 +903,73 @@ html[data-night="1"] .btn[aria-pressed="true"] {
   margin-bottom: var(--sp-4);
 }
 
-/* Location lat/lon fields */
+/* Location city presets + optional lat/lon */
+.place-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--sp-3);
+}
+
+.place-chip {
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-dim);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+.place-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-bright);
+  background: rgba(255,255,255,0.08);
+}
+
+.place-chip.active {
+  color: var(--text-primary);
+  border-color: var(--accent-b-brd);
+  background: rgba(100,168,255,0.14);
+}
+
+html[data-night="1"] .place-chip.active {
+  background: rgba(255,120,70,0.16);
+}
+
+.location-advanced {
+  margin-top: var(--sp-1);
+}
+
+.location-advanced summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  list-style: none;
+}
+
+.location-advanced summary::-webkit-details-marker { display: none; }
+
+.location-advanced summary:hover { color: var(--text-secondary); }
+
+.location-advanced[open] summary {
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-3);
+}
+
 .location-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
 }
 
 .location-field {
@@ -949,22 +1010,6 @@ html[data-night="1"] .btn[aria-pressed="true"] {
   border-color: var(--accent-b-brd);
   background: rgba(100,168,255,0.07);
 }
-
-.btn-text {
-  display: inline-block;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-accent-b);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.btn-text:hover { color: var(--text-primary); }
 
 @media (max-width: 360px) {
   .location-fields { grid-template-columns: 1fr; }

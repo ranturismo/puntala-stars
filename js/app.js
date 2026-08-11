@@ -40,6 +40,22 @@
   const ECLIPSE_DAY = new Date(2026, 7, 12); // 12 agosto 2026
   const DEFAULT_LAT = 42.8402632;        // Punta Ala
   const DEFAULT_LON = 10.7780025;
+  /** Città di esempio (coordinate circa centro città — ok per la proiezione del cielo). */
+  const PLACE_PRESETS = [
+    { id: 'punta-ala', name: 'Punta Ala', lat: DEFAULT_LAT, lon: DEFAULT_LON },
+    { id: 'brescia',   name: 'Brescia',   lat: 45.5416, lon: 10.2118 },
+    { id: 'milano',    name: 'Milano',    lat: 45.4642, lon:  9.1900 },
+    { id: 'torino',    name: 'Torino',    lat: 45.0703, lon:  7.6869 },
+    { id: 'venezia',   name: 'Venezia',   lat: 45.4408, lon: 12.3155 },
+    { id: 'firenze',   name: 'Firenze',   lat: 43.7696, lon: 11.2558 },
+    { id: 'roma',      name: 'Roma',      lat: 41.9028, lon: 12.4964 },
+    { id: 'napoli',    name: 'Napoli',    lat: 40.8518, lon: 14.2681 },
+    { id: 'bari',      name: 'Bari',      lat: 41.1171, lon: 16.8719 },
+    { id: 'messina',   name: 'Messina',   lat: 38.1938, lon: 15.5540 },
+    { id: 'palermo',   name: 'Palermo',   lat: 38.1157, lon: 13.3615 },
+    { id: 'cagliari',  name: 'Cagliari',  lat: 39.2238, lon:  9.1217 },
+  ];
+  const PLACE_MATCH_EPS = 0.0005;
 
   const PLANET_SYMBOLS = {
     'Mercurio': '☿', 'Venere': '♀', 'Marte': '♂', 'Giove': '♃', 'Saturno': '♄',
@@ -98,7 +114,7 @@
   const maskWestVal      = document.getElementById('mask-west-val');
   const locLat           = document.getElementById('loc-lat');
   const locLon           = document.getElementById('loc-lon');
-  const btnLocReset      = document.getElementById('btn-loc-reset');
+  const placePresetsEl   = document.getElementById('place-presets');
   const fabNight = document.getElementById('fab-night');
   const fabConst = document.getElementById('fab-const');
   const fabNames = document.getElementById('fab-names');
@@ -157,9 +173,40 @@
     locLon.value = String(lon);
   }
 
+  function matchPlacePreset(lat, lon) {
+    return PLACE_PRESETS.find(p =>
+      Math.abs(p.lat - lat) < PLACE_MATCH_EPS &&
+      Math.abs(p.lon - lon) < PLACE_MATCH_EPS
+    ) || null;
+  }
+
+  function syncPlacePresetUI(lat, lon) {
+    const match = matchPlacePreset(lat, lon);
+    placePresetsEl.querySelectorAll('.place-chip').forEach(btn => {
+      const on = match && btn.dataset.placeId === match.id;
+      btn.classList.toggle('active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function buildPlacePresets() {
+    placePresetsEl.innerHTML = '';
+    PLACE_PRESETS.forEach(place => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'place-chip';
+      btn.dataset.placeId = place.id;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = place.name;
+      btn.addEventListener('click', () => applyLocation(place.lat, place.lon, true));
+      placePresetsEl.appendChild(btn);
+    });
+  }
+
   function applyLocation(lat, lon, persist) {
     sky.setLocation(lat, lon);
     syncLocationInputs(lat, lon);
+    syncPlacePresetUI(lat, lon);
     if (persist) {
       storageSet('pala_lat', lat);
       storageSet('pala_lon', lon);
@@ -176,6 +223,7 @@
     const lon = parseCoord(storageGet('pala_lon', ''), -180, 180, DEFAULT_LON);
     syncLocationInputs(lat, lon);
     if (lat !== sky.lat || lon !== sky.lon) sky.setLocation(lat, lon);
+    syncPlacePresetUI(lat, lon);
     setFab(fabNight, storageGet('pala_night', '0') === '1');
     setFab(fabConst, storageGet('pala_const', '1') !== '0');
     setFab(fabNames, storageGet('pala_names', '1') !== '0');
@@ -533,10 +581,6 @@
 
   locLat.addEventListener('change', commitLocationFromInputs);
   locLon.addEventListener('change', commitLocationFromInputs);
-
-  btnLocReset.addEventListener('click', () => {
-    applyLocation(DEFAULT_LAT, DEFAULT_LON, true);
-  });
 
   /* ──────────────────────────────────────────────────────────
      Time slider + current night
@@ -1148,6 +1192,7 @@
      Init
   ────────────────────────────────────────────────────────── */
   buildBortleLabels();
+  buildPlacePresets();
   buildExploreLists();
   applyNow();
   initSlider();
