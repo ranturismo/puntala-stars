@@ -285,6 +285,14 @@ window.SkyRenderer = class SkyRenderer {
     this.render();
   }
 
+  setLocation(lat, lon) {
+    this.lat = lat;
+    this.lon = lon;
+    this.observer = new Astronomy.Observer(lat, lon, 0);
+    this._eclipseCache = null;
+    this.render();
+  }
+
   /** headAz = azimuth at the top of the screen (degrees, 0 = N). Does not touch zoom/pan. */
   setOrientation(headAz) {
     this.headAz = ((headAz % 360) + 360) % 360;

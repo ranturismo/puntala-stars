@@ -38,6 +38,8 @@
   const TIME_STEP   = 1;                 // 1 simulated minute per slider tick
   const ANIM_SPEED  = 100;               // ms per play step (~10 min/s)
   const ECLIPSE_DAY = new Date(2026, 7, 12); // 12 agosto 2026
+  const DEFAULT_LAT = 42.8402632;        // Punta Ala
+  const DEFAULT_LON = 10.7780025;
 
   const PLANET_SYMBOLS = {
     'Mercurio': '☿', 'Venere': '♀', 'Marte': '♂', 'Giove': '♃', 'Saturno': '♄',
@@ -94,6 +96,9 @@
   const maskWest         = document.getElementById('mask-west');
   const maskEastVal      = document.getElementById('mask-east-val');
   const maskWestVal      = document.getElementById('mask-west-val');
+  const locLat           = document.getElementById('loc-lat');
+  const locLon           = document.getElementById('loc-lon');
+  const btnLocReset      = document.getElementById('btn-loc-reset');
   const fabNight = document.getElementById('fab-night');
   const fabConst = document.getElementById('fab-const');
   const fabNames = document.getElementById('fab-names');
@@ -141,11 +146,36 @@
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
+  function parseCoord(raw, min, max, fallback) {
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function syncLocationInputs(lat, lon) {
+    locLat.value = String(lat);
+    locLon.value = String(lon);
+  }
+
+  function applyLocation(lat, lon, persist) {
+    sky.setLocation(lat, lon);
+    syncLocationInputs(lat, lon);
+    if (persist) {
+      storageSet('pala_lat', lat);
+      storageSet('pala_lon', lon);
+    }
+    updateTime();
+  }
+
   function loadPrefs() {
     const b = parseInt(storageGet('pala_bortle', '4'), 10);
     bortleSlider.value = Math.max(1, Math.min(9, b));
     maskEast.value = parseInt(storageGet('pala_east', '0'), 10);
     maskWest.value = parseInt(storageGet('pala_west', '0'), 10);
+    const lat = parseCoord(storageGet('pala_lat', ''), -90, 90, DEFAULT_LAT);
+    const lon = parseCoord(storageGet('pala_lon', ''), -180, 180, DEFAULT_LON);
+    syncLocationInputs(lat, lon);
+    if (lat !== sky.lat || lon !== sky.lon) sky.setLocation(lat, lon);
     setFab(fabNight, storageGet('pala_night', '0') === '1');
     setFab(fabConst, storageGet('pala_const', '1') !== '0');
     setFab(fabNames, storageGet('pala_names', '1') !== '0');
@@ -160,6 +190,8 @@
     storageSet('pala_bortle', bortleSlider.value);
     storageSet('pala_east',   maskEast.value);
     storageSet('pala_west',   maskWest.value);
+    storageSet('pala_lat',    sky.lat);
+    storageSet('pala_lon',    sky.lon);
     storageSet('pala_night',  fabOn(fabNight) ? '1' : '0');
     storageSet('pala_const',  fabOn(fabConst) ? '1' : '0');
     storageSet('pala_names',  fabOn(fabNames) ? '1' : '0');
@@ -481,6 +513,30 @@
 
   maskEast.addEventListener('input', applyMasks);
   maskWest.addEventListener('input', applyMasks);
+
+  /* ──────────────────────────────────────────────────────────
+     Location
+  ────────────────────────────────────────────────────────── */
+  function commitLocationFromInputs() {
+    const lat = parseCoord(locLat.value, -90, 90, NaN);
+    const lon = parseCoord(locLon.value, -180, 180, NaN);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      syncLocationInputs(sky.lat, sky.lon);
+      return;
+    }
+    if (lat === sky.lat && lon === sky.lon) {
+      syncLocationInputs(lat, lon); // normalize clamped display
+      return;
+    }
+    applyLocation(lat, lon, true);
+  }
+
+  locLat.addEventListener('change', commitLocationFromInputs);
+  locLon.addEventListener('change', commitLocationFromInputs);
+
+  btnLocReset.addEventListener('click', () => {
+    applyLocation(DEFAULT_LAT, DEFAULT_LON, true);
+  });
 
   /* ──────────────────────────────────────────────────────────
      Time slider + current night

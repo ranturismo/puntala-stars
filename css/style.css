@@ -903,6 +903,73 @@ html[data-night="1"] .btn[aria-pressed="true"] {
   margin-bottom: var(--sp-4);
 }
 
+/* Location lat/lon fields */
+.location-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.location-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.location-field-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.location-field input[type="number"] {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-dim);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.location-field input[type="number"]::-webkit-outer-spin-button,
+.location-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.location-field input[type="number"]:focus {
+  border-color: var(--accent-b-brd);
+  background: rgba(100,168,255,0.07);
+}
+
+.btn-text {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-accent-b);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-text:hover { color: var(--text-primary); }
+
+@media (max-width: 360px) {
+  .location-fields { grid-template-columns: 1fr; }
+}
+
 /* Full-width toggle rows — thumb-friendly (~44px) */
 .toggle-row {
   display: flex;
