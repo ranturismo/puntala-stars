@@ -1,4 +1,4 @@
-// UI logic — Punta Ala Stars
+// UI logic — Cielo Notturno
 (function () {
   'use strict';
 
@@ -13,7 +13,7 @@
     { class: 3, label: 'Rurale',            limitingMag: 5.0, skyGlow: 0.00,
       desc: 'Leggero chiarore verso gli orizzonti urbani. Eccellente per l\'osservazione.' },
     { class: 4, label: 'Rurale–suburbano',  limitingMag: 4.5, skyGlow: 0.10,
-      desc: 'Cielo tipico di Punta Ala in una notte tranquilla. Via Lattea visibile, stelle deboli riconoscibili.' },
+      desc: 'Cielo tipico di una notte tranquilla in campagna. Via Lattea visibile, stelle deboli riconoscibili.' },
     { class: 5, label: 'Suburbano',         limitingMag: 3.8, skyGlow: 0.28,
       desc: 'Chiarore diffuso. Via Lattea pallida. Comune nelle periferie urbane.' },
     { class: 6, label: 'Periferia urbana',  limitingMag: 3.0, skyGlow: 0.48,
@@ -38,12 +38,12 @@
   const TIME_STEP   = 1;                 // 1 simulated minute per slider tick
   const ANIM_SPEED  = 100;               // ms per play step (~10 min/s)
   const ECLIPSE_DAY = new Date(2026, 7, 12); // 12 agosto 2026
-  const DEFAULT_LAT = 42.8402632;        // Punta Ala
-  const DEFAULT_LON = 10.7780025;
+  const DEFAULT_LAT = 45.5416;            // Brescia
+  const DEFAULT_LON = 10.2118;
   /** Città di esempio (coordinate circa centro città — ok per la proiezione del cielo). */
   const PLACE_PRESETS = [
-    { id: 'punta-ala', name: 'Punta Ala', lat: DEFAULT_LAT, lon: DEFAULT_LON },
     { id: 'brescia',   name: 'Brescia',   lat: 45.5416, lon: 10.2118 },
+    { id: 'punta-ala', name: 'Punta Ala', lat: 42.8402632, lon: 10.7780025 },
     { id: 'milano',    name: 'Milano',    lat: 45.4642, lon:  9.1900 },
     { id: 'torino',    name: 'Torino',    lat: 45.0703, lon:  7.6869 },
     { id: 'venezia',   name: 'Venezia',   lat: 45.4408, lon: 12.3155 },
@@ -64,7 +64,7 @@
     { id: 's', label: 'Sud',   headAz: 180 },
     { id: 'o', label: 'Ovest', headAz: 270 },
   ];
-  const DEFAULT_HEAD_AZ = 90; // est in alto → piedi verso ovest (il mare)
+  const DEFAULT_HEAD_AZ = 0; // nord in alto
 
   const PLANET_SYMBOLS = {
     'Mercurio': '☿', 'Venere': '♀', 'Marte': '♂', 'Giove': '♃', 'Saturno': '♄',
@@ -125,6 +125,8 @@
   const locLon           = document.getElementById('loc-lon');
   const placePresetsEl   = document.getElementById('place-presets');
   const orientationPresetsEl = document.getElementById('orientation-presets');
+  const btnGps          = document.getElementById('btn-gps');
+  const gpsStatus       = document.getElementById('gps-status');
   const fabNight = document.getElementById('fab-night');
   const fabConst = document.getElementById('fab-const');
   const fabNames = document.getElementById('fab-names');
@@ -238,7 +240,6 @@
   }
 
   function fixedFeetNote(headAz) {
-    if (headAz === 90) return 'mare (ovest)';
     return cardinalIt((headAz + 180) % 360);
   }
 
@@ -253,12 +254,10 @@
   }
 
   // Rotazione manuale (due dita): esce dalla bussola e gira liberamente la mappa.
+  // È effimera: il default (impostazioni) resta quello scelto/nord.
   sky.onRotate = (headAz) => {
     if (compassMode !== 'off') stopCompass();
     applyFixedOrientation(headAz, false);
-  };
-  sky.onRotateEnd = (headAz) => {
-    storageSet('pala_orient', fixedHeadAz);
   };
 
   function applyLocation(lat, lon, persist) {
@@ -272,6 +271,32 @@
     updateTime();
   }
 
+  function setGpsStatus(msg, isError) {
+    gpsStatus.hidden = false;
+    gpsStatus.textContent = msg;
+    gpsStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function requestDeviceLocation() {
+    if (!('geolocation' in navigator)) {
+      setGpsStatus('Geolocalizzazione non disponibile', true);
+      return;
+    }
+    setGpsStatus('Individuazione in corso…');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        applyLocation(pos.coords.latitude, pos.coords.longitude, true);
+        setGpsStatus('Posizione aggiornata');
+      },
+      () => {
+        setGpsStatus('Posizione negata o non disponibile', true);
+      },
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 }
+    );
+  }
+
+  btnGps.addEventListener('click', requestDeviceLocation);
+
   function loadPrefs() {
     const b = parseInt(storageGet('pala_bortle', '4'), 10);
     bortleSlider.value = Math.max(1, Math.min(9, b));
@@ -282,6 +307,13 @@
     syncLocationInputs(lat, lon);
     if (lat !== sky.lat || lon !== sky.lon) sky.setLocation(lat, lon);
     syncPlacePresetUI(lat, lon);
+    // Migrazione una tantum: il vecchio default era est (90), ora è nord (0)
+    if (storageGet('pala_orient_v2', '') !== '1') {
+      storageSet('pala_orient_v2', '1');
+      if (storageGet('pala_orient', '') === '90') {
+        storageSet('pala_orient', String(DEFAULT_HEAD_AZ));
+      }
+    }
     const headAz = parseInt(storageGet('pala_orient', String(DEFAULT_HEAD_AZ)), 10);
     applyFixedOrientation(
       ORIENTATION_PRESETS.some(p => p.headAz === headAz) ? headAz : DEFAULT_HEAD_AZ,
@@ -303,7 +335,6 @@
     storageSet('pala_west',   maskWest.value);
     storageSet('pala_lat',    sky.lat);
     storageSet('pala_lon',    sky.lon);
-    storageSet('pala_orient', fixedHeadAz);
     storageSet('pala_night',  fabOn(fabNight) ? '1' : '0');
     storageSet('pala_const',  fabOn(fabConst) ? '1' : '0');
     storageSet('pala_names',  fabOn(fabNames) ? '1' : '0');
@@ -1149,6 +1180,17 @@
     ingestOrientation(e, { fromAbsolute: false });
   }
 
+  let noteFlashTimer = null;
+  function flashOrientationNote(msg, ms) {
+    orientationNote.textContent = msg;
+    if (noteFlashTimer) clearTimeout(noteFlashTimer);
+    noteFlashTimer = setTimeout(() => {
+      if (compassMode === 'off') {
+        orientationNote.textContent = '↓ ' + fixedFeetNote(fixedHeadAz);
+      }
+    }, ms || 2600);
+  }
+
   function stopCompass() {
     compassMode = 'off';
     compassRawHeading = null;
@@ -1165,8 +1207,8 @@
       compassRelativeHandler = null;
     }
     btnCompass.setAttribute('aria-pressed', 'false');
-    btnCompass.setAttribute('aria-label', 'Punta il cielo');
-    btnCompass.title = 'Punta il cielo';
+    btnCompass.setAttribute('aria-label', 'Attiva bussola');
+    btnCompass.title = 'Attiva bussola';
     hidePointPrompt();
     sky.setOrientation(fixedHeadAz);
     orientationNote.style.display = '';
@@ -1185,8 +1227,8 @@
     window.addEventListener('deviceorientationabsolute', compassAbsoluteHandler);
     window.addEventListener('deviceorientation', compassRelativeHandler);
     btnCompass.setAttribute('aria-pressed', 'true');
-    btnCompass.setAttribute('aria-label', 'Disattiva puntamento');
-    btnCompass.title = 'Disattiva puntamento';
+    btnCompass.setAttribute('aria-label', 'Disattiva bussola');
+    btnCompass.title = 'Disattiva bussola';
     orientationNote.style.display = '';
     showPointPrompt();
     calibrateText.textContent = 'Pizzica per zoomare · gira il telefono';
@@ -1205,6 +1247,7 @@
   btnCompass.addEventListener('click', async () => {
     if (compassMode !== 'off') {
       stopCompass();
+      flashOrientationNote('Esplorazione libera — ruota con due dita');
       return;
     }
     if (typeof window.DeviceOrientationEvent === 'undefined') {

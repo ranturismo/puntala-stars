@@ -17,12 +17,12 @@ window.SkyRenderer = class SkyRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.lat = 42.8402632;
-    this.lon = 10.7780025;
+    this.lat = 45.5416;
+    this.lon = 10.2118;
     this.observer = new Astronomy.Observer(this.lat, this.lon, 0);
     this.date = new Date('2026-08-12T22:00:00+02:00');
-    this.feetAz = 270; // feet toward W (mare), north appears on right
-    this.headAz = (this.feetAz + 180) % 360;
+    this.headAz = 0;   // nord in alto
+    this.feetAz = 180;
 
     this.zoom = 1;
     this.panX = 0;

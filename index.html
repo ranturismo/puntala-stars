@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Mappa del cielo notturno per Punta Ala. Perseidi, costellazioni e stelle.">
+  <meta name="description" content="Mappa interattiva del cielo notturno: costellazioni, stelle e pianeti.">
   <meta name="theme-color" content="#080c18">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Punta Ala — Cielo Notturno</title>
+  <title>Cielo Notturno</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
 
   <canvas id="sky" role="img" aria-label="Mappa interattiva del cielo notturno"></canvas>
 
-  <div id="orientation-note" aria-hidden="true">↓ mare (ovest)</div>
+  <div id="orientation-note" aria-hidden="true">↓ sud</div>
 
   <aside id="view-toggles" aria-label="Opzioni vista">
     <button type="button" class="view-fab" id="fab-night"
@@ -135,10 +135,14 @@
           <div class="settings-section-body">
             <p class="settings-desc">
               Scegli una città vicina: nella stessa regione il cielo cambia poco.
-              Predefinito: Punta Ala.
+              Predefinito: Brescia.
             </p>
             <div id="place-presets" class="place-presets" role="group"
                  aria-label="Città di esempio"></div>
+            <button type="button" class="btn btn-ghost btn-gps" id="btn-gps">
+              <span aria-hidden="true">📍</span> Usa la mia posizione
+            </button>
+            <p id="gps-status" class="gps-status" role="status" aria-live="polite" hidden></p>
             <details class="location-advanced">
               <summary>Coordinate personalizzate</summary>
               <div class="location-fields">
@@ -222,15 +226,15 @@
       <div class="hint-row">
         <span class="hint-icon" aria-hidden="true">🧭</span>
         <p class="hint-text">
-          Stai guardando <strong>verso ovest</strong> (il mare di Punta Ala).
-          Il nord è a destra, il sud a sinistra.
+          Il cielo è mostrato con il <strong>nord in alto</strong>.
+          Puoi ruotarlo liberamente con due dita, o usare la bussola per orientarlo come lo guardi.
         </p>
       </div>
       <div class="hint-row">
         <span class="hint-icon" aria-hidden="true">👆</span>
         <p class="hint-text">
           Pizzica per zoomare · trascina per muoverti · ruota con due dita per girare la mappa · doppio tocco per il reset.
-          Con <strong>Punta il cielo</strong> (◎) la mappa segue la bussola; puoi comunque zoomare.
+          Il toggle <strong>Bussola</strong> (◎) segue il cielo col telefono; altrimenti sei in <strong>esplorazione libera</strong>.
           Usa <strong>Esplora</strong> per scoprire costellazioni e miti.
         </p>
       </div>
