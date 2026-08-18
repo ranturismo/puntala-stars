@@ -252,6 +252,15 @@
     if (persist) storageSet('pala_orient', fixedHeadAz);
   }
 
+  // Rotazione manuale (due dita): esce dalla bussola e gira liberamente la mappa.
+  sky.onRotate = (headAz) => {
+    if (compassMode !== 'off') stopCompass();
+    applyFixedOrientation(headAz, false);
+  };
+  sky.onRotateEnd = (headAz) => {
+    storageSet('pala_orient', fixedHeadAz);
+  };
+
   function applyLocation(lat, lon, persist) {
     sky.setLocation(lat, lon);
     syncLocationInputs(lat, lon);

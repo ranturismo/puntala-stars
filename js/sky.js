@@ -42,6 +42,8 @@ window.SkyRenderer = class SkyRenderer {
     this.showAzimuthRays = false;
     this.showStarNames = true;
     this._eclipseCache = null;
+    this.onRotate = null;
+    this.onRotateEnd = null;
 
     this.setupResize();
     this.computeStaticStars();
@@ -295,9 +297,13 @@ window.SkyRenderer = class SkyRenderer {
 
   /** headAz = azimuth at the top of the screen (degrees, 0 = N). Does not touch zoom/pan. */
   setOrientation(headAz) {
+    this._setHeadAz(headAz);
+    this.render();
+  }
+
+  _setHeadAz(headAz) {
     this.headAz = ((headAz % 360) + 360) % 360;
     this.feetAz = (this.headAz + 180) % 360;
-    this.render();
   }
 
   getInfo() {
@@ -1295,7 +1301,10 @@ window.SkyRenderer = class SkyRenderer {
           startZoom: this.zoom,
           startPanX: this.panX,
           startPanY: this.panY,
+          startAngle: this._angle(pts[0], pts[1]),
+          startHeadAz: this.headAz,
         };
+        this._pinchRotated = false;
         this._lastDrag = null;
       } else if (this._pointers.size === 1) {
         this._lastDrag = { x: e.offsetX, y: e.offsetY };
@@ -1326,6 +1335,14 @@ window.SkyRenderer = class SkyRenderer {
         if (this.zoom <= 1) { this.zoom = 1; this.panX = 0; this.panY = 0; }
         this.clampPan();
         this.radius = this.baseRadius * this.zoom;
+
+        const dRot = (this._angle(pts[0], pts[1]) - s.startAngle) * 180 / Math.PI;
+        if (Math.abs(dRot) > 0.5) {
+          this._pinchRotated = true;
+          this._setHeadAz(s.startHeadAz + dRot);
+          if (this.onRotate) this.onRotate(this.headAz);
+        }
+
         this.render();
         this._lastDrag = null;
       } else if (this._pointers.size === 1 && this.zoom > 1 && this._lastDrag) {
@@ -1341,9 +1358,13 @@ window.SkyRenderer = class SkyRenderer {
 
     const up = (e) => {
       this._pointers.delete(e.pointerId);
-      if (this._pointers.size === 0) {
+      if (this._pointers.size < 2) {
+        if (this._pinchStart && this._pinchRotated && this.onRotateEnd) {
+          this.onRotateEnd(this.headAz);
+        }
         this._pinchStart = null;
-        this._lastDrag = null;
+        this._pinchRotated = false;
+        if (this._pointers.size === 0) this._lastDrag = null;
       }
     };
     canvas.addEventListener('pointerup', up);
@@ -1362,6 +1383,10 @@ window.SkyRenderer = class SkyRenderer {
 
   _mid(a, b) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  _angle(a, b) {
+    return Math.atan2(b.y - a.y, b.x - a.x);
   }
 
   zoomAt(fx, fy, factor) {
