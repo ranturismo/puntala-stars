@@ -57,6 +57,15 @@
   ];
   const PLACE_MATCH_EPS = 0.0005;
 
+  /** Orientamento fisso della mappa (direzione in alto) quando la bussola è spenta. */
+  const ORIENTATION_PRESETS = [
+    { id: 'n', label: 'Nord',  headAz: 0 },
+    { id: 'e', label: 'Est',   headAz: 90 },
+    { id: 's', label: 'Sud',   headAz: 180 },
+    { id: 'o', label: 'Ovest', headAz: 270 },
+  ];
+  const DEFAULT_HEAD_AZ = 90; // est in alto → piedi verso ovest (il mare)
+
   const PLANET_SYMBOLS = {
     'Mercurio': '☿', 'Venere': '♀', 'Marte': '♂', 'Giove': '♃', 'Saturno': '♄',
   };
@@ -115,6 +124,7 @@
   const locLat           = document.getElementById('loc-lat');
   const locLon           = document.getElementById('loc-lon');
   const placePresetsEl   = document.getElementById('place-presets');
+  const orientationPresetsEl = document.getElementById('orientation-presets');
   const fabNight = document.getElementById('fab-night');
   const fabConst = document.getElementById('fab-const');
   const fabNames = document.getElementById('fab-names');
@@ -138,6 +148,7 @@
   let activeExploreTab = 'constellations';
   let lastFocusExplore  = null;
   let lastFocusSettings = null;
+  let fixedHeadAz = DEFAULT_HEAD_AZ;
 
   function startOfLocalDay(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
@@ -203,6 +214,44 @@
     });
   }
 
+  function buildOrientationPresets() {
+    orientationPresetsEl.innerHTML = '';
+    ORIENTATION_PRESETS.forEach(o => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'place-chip';
+      btn.dataset.orientId = o.id;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = o.label;
+      btn.addEventListener('click', () => applyFixedOrientation(o.headAz, true));
+      orientationPresetsEl.appendChild(btn);
+    });
+  }
+
+  function syncOrientationUI() {
+    orientationPresetsEl.querySelectorAll('.place-chip').forEach(btn => {
+      const o = ORIENTATION_PRESETS.find(p => p.id === btn.dataset.orientId);
+      const on = !!o && o.headAz === fixedHeadAz;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function fixedFeetNote(headAz) {
+    if (headAz === 90) return 'mare (ovest)';
+    return cardinalIt((headAz + 180) % 360);
+  }
+
+  function applyFixedOrientation(headAz, persist) {
+    fixedHeadAz = normalizeAz(headAz);
+    syncOrientationUI();
+    if (compassMode === 'off') {
+      sky.setOrientation(fixedHeadAz);
+      orientationNote.textContent = '↓ ' + fixedFeetNote(fixedHeadAz);
+    }
+    if (persist) storageSet('pala_orient', fixedHeadAz);
+  }
+
   function applyLocation(lat, lon, persist) {
     sky.setLocation(lat, lon);
     syncLocationInputs(lat, lon);
@@ -224,6 +273,11 @@
     syncLocationInputs(lat, lon);
     if (lat !== sky.lat || lon !== sky.lon) sky.setLocation(lat, lon);
     syncPlacePresetUI(lat, lon);
+    const headAz = parseInt(storageGet('pala_orient', String(DEFAULT_HEAD_AZ)), 10);
+    applyFixedOrientation(
+      ORIENTATION_PRESETS.some(p => p.headAz === headAz) ? headAz : DEFAULT_HEAD_AZ,
+      false
+    );
     setFab(fabNight, storageGet('pala_night', '0') === '1');
     setFab(fabConst, storageGet('pala_const', '1') !== '0');
     setFab(fabNames, storageGet('pala_names', '1') !== '0');
@@ -240,6 +294,7 @@
     storageSet('pala_west',   maskWest.value);
     storageSet('pala_lat',    sky.lat);
     storageSet('pala_lon',    sky.lon);
+    storageSet('pala_orient', fixedHeadAz);
     storageSet('pala_night',  fabOn(fabNight) ? '1' : '0');
     storageSet('pala_const',  fabOn(fabConst) ? '1' : '0');
     storageSet('pala_names',  fabOn(fabNames) ? '1' : '0');
@@ -892,7 +947,6 @@
   /* ──────────────────────────────────────────────────────────
      Compass — heading allinea la mappa; tilt = solo bolla/prompt
   ────────────────────────────────────────────────────────── */
-  const FIXED_HEAD_AZ = 90; // top of screen = east (feet toward mare / west)
   const CARDINAL_IT = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
   const COMPASS_SMOOTH = 0.12;
   const COMPASS_DEADBAND_AZ = 1.2;
@@ -1105,9 +1159,9 @@
     btnCompass.setAttribute('aria-label', 'Punta il cielo');
     btnCompass.title = 'Punta il cielo';
     hidePointPrompt();
-    sky.setOrientation(FIXED_HEAD_AZ);
+    sky.setOrientation(fixedHeadAz);
     orientationNote.style.display = '';
-    orientationNote.textContent = '↓ mare (ovest)';
+    orientationNote.textContent = '↓ ' + fixedFeetNote(fixedHeadAz);
   }
 
   function startCompassFollow() {
@@ -1193,6 +1247,7 @@
   ────────────────────────────────────────────────────────── */
   buildBortleLabels();
   buildPlacePresets();
+  buildOrientationPresets();
   buildExploreLists();
   applyNow();
   initSlider();

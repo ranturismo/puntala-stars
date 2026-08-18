@@ -129,7 +129,8 @@ html[data-night="1"] #hint-overlay {
   background: rgba(20,0,0,0.55);
 }
 
-html[data-night="1"] #bortle-slider,
+html[data-night="1"] #bortle-slider::-webkit-slider-runnable-track,
+html[data-night="1"] #bortle-slider::-moz-range-track,
 html[data-night="1"] #bortle-track-strip {
   background: linear-gradient(to right,
     #401008 0%,
@@ -146,7 +147,8 @@ html[data-night="1"] #bortle-slider::-moz-range-thumb {
   box-shadow: 0 0 0 2px rgba(255,140,80,0.55), 0 2px 8px rgba(0,0,0,0.6);
 }
 
-html[data-night="1"] .mask-control input[type="range"] {
+html[data-night="1"] .mask-control input[type="range"]::-webkit-slider-runnable-track,
+html[data-night="1"] .mask-control input[type="range"]::-moz-range-track {
   background: rgba(255,80,40,0.28);
 }
 html[data-night="1"] .mask-control input[type="range"]::-webkit-slider-thumb,
@@ -882,18 +884,53 @@ html[data-night="1"] .btn[aria-pressed="true"] {
    Settings — toggles + Bortle
    ═══════════════════════════════════════════════════════════ */
 .settings-section {
-  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  padding: 0;
   border-bottom: 1px solid var(--border-faint);
 }
 .settings-section:last-child { border-bottom: none; }
+
+.settings-section summary.settings-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  min-height: 48px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-section summary.settings-section-title::-webkit-details-marker { display: none; }
+
+.settings-section summary.settings-section-title::after {
+  content: '';
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-dim);
+  border-bottom: 2px solid var(--text-dim);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.settings-section[open] summary.settings-section-title::after {
+  transform: rotate(225deg) translateY(-1px) translateX(-1px);
+}
 
 .settings-section-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: var(--sp-2);
+  margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.settings-section-body {
+  padding: 0 var(--sp-4) var(--sp-4);
 }
 
 .settings-desc {
@@ -913,7 +950,11 @@ html[data-night="1"] .btn[aria-pressed="true"] {
 
 .place-chip {
   margin: 0;
-  padding: 7px 12px;
+  padding: 7px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--r-md);
   border: 1px solid var(--border-dim);
   background: rgba(255,255,255,0.04);
@@ -1129,6 +1170,13 @@ html[data-night="1"] .place-chip.active {
   width: 100%;
   -webkit-appearance: none;
   appearance: none;
+  height: 32px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  margin-bottom: var(--sp-2);
+}
+#bortle-slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
   background: linear-gradient(to right,
@@ -1138,13 +1186,22 @@ html[data-night="1"] .place-chip.active {
     #c05830 72%,
     #c87818 100%
   );
-  outline: none;
-  cursor: pointer;
-  margin-bottom: var(--sp-2);
+}
+#bortle-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    #0e2260 0%,
+    #1a3da0 25%,
+    #6a40a0 48%,
+    #c05830 72%,
+    #c87818 100%
+  );
 }
 #bortle-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 24px; height: 24px;
+  margin-top: -9px;
   border-radius: 50%;
   background: #fff;
   border: 3px solid var(--sky-mid);
@@ -1245,15 +1302,25 @@ html[data-night="1"] .place-chip.active {
   flex: 1;
   -webkit-appearance: none;
   appearance: none;
+  height: 32px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+.mask-control input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   background: rgba(255,140,60,0.25);
   border-radius: 2px;
-  outline: none;
-  cursor: pointer;
+}
+.mask-control input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: rgba(255,140,60,0.25);
+  border-radius: 2px;
 }
 .mask-control input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 18px; height: 18px;
+  margin-top: -7px;
   border-radius: 50%;
   background: #ff9040;
   border: 2px solid rgba(255,255,255,0.85);

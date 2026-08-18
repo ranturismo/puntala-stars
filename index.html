@@ -130,69 +130,86 @@
       </div>
       <div class="sheet-body">
 
-        <section class="settings-section">
-          <h3 class="settings-section-title">Luogo</h3>
-          <p class="settings-desc">
-            Scegli una città vicina: nella stessa regione il cielo cambia poco.
-            Predefinito: Punta Ala.
-          </p>
-          <div id="place-presets" class="place-presets" role="group"
-               aria-label="Città di esempio"></div>
-          <details class="location-advanced">
-            <summary>Coordinate personalizzate</summary>
-            <div class="location-fields">
-              <label class="location-field" for="loc-lat">
-                <span class="location-field-label">Latitudine</span>
-                <input type="number" id="loc-lat" min="-90" max="90" step="any"
-                       inputmode="decimal" autocomplete="off"
-                       aria-label="Latitudine in gradi">
-              </label>
-              <label class="location-field" for="loc-lon">
-                <span class="location-field-label">Longitudine</span>
-                <input type="number" id="loc-lon" min="-180" max="180" step="any"
-                       inputmode="decimal" autocomplete="off"
-                       aria-label="Longitudine in gradi">
-              </label>
+        <details class="settings-section" open>
+          <summary class="settings-section-title">Luogo</summary>
+          <div class="settings-section-body">
+            <p class="settings-desc">
+              Scegli una città vicina: nella stessa regione il cielo cambia poco.
+              Predefinito: Punta Ala.
+            </p>
+            <div id="place-presets" class="place-presets" role="group"
+                 aria-label="Città di esempio"></div>
+            <details class="location-advanced">
+              <summary>Coordinate personalizzate</summary>
+              <div class="location-fields">
+                <label class="location-field" for="loc-lat">
+                  <span class="location-field-label">Latitudine</span>
+                  <input type="number" id="loc-lat" min="-90" max="90" step="any"
+                         inputmode="decimal" autocomplete="off"
+                         aria-label="Latitudine in gradi">
+                </label>
+                <label class="location-field" for="loc-lon">
+                  <span class="location-field-label">Longitudine</span>
+                  <input type="number" id="loc-lon" min="-180" max="180" step="any"
+                         inputmode="decimal" autocomplete="off"
+                         aria-label="Longitudine in gradi">
+                </label>
+              </div>
+            </details>
+          </div>
+        </details>
+
+        <details class="settings-section">
+          <summary class="settings-section-title">Orientamento</summary>
+          <div class="settings-section-body">
+            <p class="settings-desc">
+              Direzione in alto sulla mappa quando la bussola è spenta.
+            </p>
+            <div id="orientation-presets" class="place-presets" role="group"
+                 aria-label="Orientamento mappa"></div>
+          </div>
+        </details>
+
+        <details class="settings-section">
+          <summary class="settings-section-title">Inquinamento luminoso</summary>
+          <div class="settings-section-body">
+            <p class="settings-desc">
+              Scegli la classe Bortle per simulare quante stelle riesci a vedere dal luogo in cui ti trovi.
+            </p>
+            <div id="bortle-selector">
+              <div id="bortle-track-labels" aria-hidden="true"></div>
+              <input type="range" id="bortle-slider" min="1" max="9" value="4" step="1"
+                     aria-label="Scala Bortle: 1 cielo perfetto, 9 centro città">
+              <div id="bortle-track-strip" aria-hidden="true"></div>
             </div>
-          </details>
-        </section>
+            <div id="bortle-card" aria-live="polite"></div>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h3 class="settings-section-title">Inquinamento luminoso</h3>
-          <p class="settings-desc">
-            Scegli la classe Bortle per simulare quante stelle riesci a vedere dal luogo in cui ti trovi.
-          </p>
-          <div id="bortle-selector">
-            <div id="bortle-track-labels" aria-hidden="true"></div>
-            <input type="range" id="bortle-slider" min="1" max="9" value="4" step="1"
-                   aria-label="Scala Bortle: 1 cielo perfetto, 9 centro città">
-            <div id="bortle-track-strip" aria-hidden="true"></div>
+        <details class="settings-section">
+          <summary class="settings-section-title">Ostruzioni all'orizzonte</summary>
+          <div class="settings-section-body">
+            <p class="settings-desc">
+              Nasconde le stelle basse bloccate da alberi, dune o edifici.
+            </p>
+            <div class="mask-control">
+              <label for="mask-east" class="mask-label">
+                <span class="mask-icon" aria-hidden="true">🌳</span> Est
+              </label>
+              <input type="range" id="mask-east" min="0" max="25" value="0" step="1"
+                     aria-label="Altezza ostruzioni a est, in gradi">
+              <output class="mask-val" id="mask-east-val">0°</output>
+            </div>
+            <div class="mask-control">
+              <label for="mask-west" class="mask-label">
+                <span class="mask-icon" aria-hidden="true">💡</span> Ovest
+              </label>
+              <input type="range" id="mask-west" min="0" max="25" value="0" step="1"
+                     aria-label="Altezza ostruzioni a ovest, in gradi">
+              <output class="mask-val" id="mask-west-val">0°</output>
+            </div>
           </div>
-          <div id="bortle-card" aria-live="polite"></div>
-        </section>
-
-        <section class="settings-section">
-          <h3 class="settings-section-title">Ostruzioni all'orizzonte</h3>
-          <p class="settings-desc">
-            Nasconde le stelle basse bloccate da alberi, dune o edifici.
-          </p>
-          <div class="mask-control">
-            <label for="mask-east" class="mask-label">
-              <span class="mask-icon" aria-hidden="true">🌳</span> Est
-            </label>
-            <input type="range" id="mask-east" min="0" max="25" value="0" step="1"
-                   aria-label="Altezza ostruzioni a est, in gradi">
-            <output class="mask-val" id="mask-east-val">0°</output>
-          </div>
-          <div class="mask-control">
-            <label for="mask-west" class="mask-label">
-              <span class="mask-icon" aria-hidden="true">💡</span> Ovest
-            </label>
-            <input type="range" id="mask-west" min="0" max="25" value="0" step="1"
-                   aria-label="Altezza ostruzioni a ovest, in gradi">
-            <output class="mask-val" id="mask-west-val">0°</output>
-          </div>
-        </section>
+        </details>
 
       </div>
     </div>
